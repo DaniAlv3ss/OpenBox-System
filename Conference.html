@@ -1,0 +1,188 @@
+<!-- CONFERÊNCIA VIEW -->
+<div v-if="currentView === 'conferencia'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in flex-col relative z-0 h-full">
+    
+    <!-- HEADER DA ABA -->
+    <div class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm shrink-0 z-20">
+        <h2 class="text-xl font-bold text-slate-700 flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check text-indigo-500"></i> Qualidade & Conferência
+        </h2>
+        
+        <!-- Controles de Navegação -->
+        <div class="flex items-center gap-3">
+             <button v-if="confMode !== 'list'" @click="backToConfDashboard" class="btn btn-sm btn-ghost text-slate-500 gap-2">
+                <i class="fa-solid fa-arrow-left"></i> Voltar
+             </button>
+             <button @click="fetchConferenceData" class="btn btn-sm btn-ghost text-slate-400 hover:text-indigo-500 btn-square" title="Atualizar">
+                <i class="fa-solid fa-rotate" :class="{'animate-spin': confLoading}"></i>
+             </button>
+        </div>
+    </div>
+
+    <!-- MODO 1: DASHBOARD & LISTA PENDENTE -->
+    <div v-if="confMode === 'list'" class="flex-1 overflow-y-auto p-8 custom-scroll">
+        
+        <!-- Mini Dashboard -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 relative overflow-hidden">
+                <div class="relative z-10">
+                    <div class="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Aguardando Conferência</div>
+                    <div class="text-4xl font-black">{{ stats.pending }}</div>
+                    <div class="text-indigo-200 text-xs mt-2 font-medium">Lotes Pendentes</div>
+                </div>
+                <i class="fa-solid fa-clock absolute -right-4 -bottom-4 text-8xl text-indigo-400 opacity-20"></i>
+            </div>
+
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden hover:border-emerald-300 transition-colors cursor-pointer" @click="openHistory">
+                <div class="relative z-10">
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Concluídos</div>
+                    <div class="text-4xl font-black text-slate-700">{{ stats.completed }}</div>
+                    <div class="text-emerald-500 text-xs mt-2 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-check-circle"></i> Ver Histórico Completo
+                    </div>
+                </div>
+                <i class="fa-solid fa-clipboard-list absolute -right-4 -bottom-4 text-8xl text-slate-100"></i>
+            </div>
+
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+                 <div class="relative z-10">
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Peças para Verificar</div>
+                    <div class="text-4xl font-black text-slate-700">{{ stats.totalItems }}</div>
+                    <div class="text-slate-400 text-xs mt-2 font-medium">Total de componentes</div>
+                </div>
+                <i class="fa-solid fa-microchip absolute -right-4 -bottom-4 text-8xl text-slate-100"></i>
+            </div>
+        </div>
+
+        <!-- Lista de Pendências -->
+        <h3 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-hourglass-half text-orange-500"></i> Fila de Conferência
+        </h3>
+        
+        <div v-if="confPendingList.length === 0" class="flex flex-col items-center justify-center h-48 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">
+            <i class="fa-solid fa-check-double text-4xl mb-3 opacity-50"></i>
+            <p>Tudo limpo! Nenhuma conferência pendente.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div v-for="lote in confPendingList" :key="lote.id" 
+                 class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all group relative overflow-hidden">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide">
+                        {{ lote.status }}
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono">{{ lote.data.split(' ')[0] }}</span>
+                </div>
+                <h4 class="font-bold text-slate-800 text-lg mb-1 group-hover:text-indigo-600 transition-colors">{{ lote.id }}</h4>
+                <div class="space-y-1 mb-4">
+                    <div v-for="pc in lote.pcs" :key="pc.nome" class="flex items-center gap-2 text-xs text-slate-600">
+                        <i class="fa-solid fa-desktop text-slate-300"></i>
+                        <span class="truncate font-medium">{{ pc.nome }}</span>
+                        <span class="text-slate-400 ml-auto">{{ pc.itens.length }} itens</span>
+                    </div>
+                </div>
+                <button @click="openChecklist(lote)" class="btn btn-sm w-full bg-slate-50 text-slate-600 border-slate-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all">
+                    Iniciar Conferência
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODO 2: CHECKLIST ATIVO -->
+    <div v-else-if="confMode === 'check' && confSelectedPC" class="flex-1 flex flex-col h-full relative overflow-hidden">
+        <!-- Barra de Progresso Superior -->
+        <div class="bg-indigo-900 text-white px-8 py-6 shadow-lg z-20 shrink-0">
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <div class="text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1">Conferindo Lote {{ confSelectedLote.id }}</div>
+                    <h2 class="text-2xl font-bold">{{ confSelectedPC.nome }}</h2>
+                </div>
+                <div class="text-right">
+                    <div class="text-3xl font-black text-emerald-400">{{ currentPCProgress }}%</div>
+                    <div class="text-indigo-300 text-xs">Concluído</div>
+                </div>
+            </div>
+            <div class="w-full bg-indigo-800 rounded-full h-2 overflow-hidden">
+                <div class="bg-emerald-400 h-full transition-all duration-500 ease-out" :style="{ width: currentPCProgress + '%' }"></div>
+            </div>
+        </div>
+
+        <!-- Lista de Itens (Scrollable) -->
+        <div class="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scroll mb-20"> <!-- mb-20 para não ficar atrás do footer -->
+            <div class="max-w-4xl mx-auto space-y-3">
+                <div v-for="item in confSelectedPC.itens" :key="item.etiqueta" 
+                     @click="toggleCheckItem(item)"
+                     class="bg-white p-4 rounded-xl border transition-all cursor-pointer flex items-center gap-4 select-none group"
+                     :class="item.checked ? 'border-emerald-500 bg-emerald-50/30 shadow-sm' : 'border-slate-200 hover:border-indigo-300'">
+                    
+                    <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+                         :class="item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-transparent group-hover:border-indigo-400'">
+                        <i class="fa-solid fa-check"></i>
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase">{{ item.categoria }}</span>
+                            <span class="text-xs font-mono text-slate-400">{{ item.etiqueta }}</span>
+                        </div>
+                        <div class="font-bold text-slate-700 text-sm truncate" :class="{'line-through opacity-50': item.checked}">{{ item.descricao }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Actions (FIXO NO RODAPÉ) -->
+        <div class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] z-30 flex justify-between items-center">
+            <div class="text-xs text-slate-500 font-medium">
+                 Itens verificados: <span class="text-indigo-600 font-bold">{{ confSelectedPC.itens.filter(i => i.checked).length }}</span> / {{ confSelectedPC.itens.length }}
+            </div>
+            <button @click="finishConference" 
+                    :disabled="!isLoteReadyToFinish || confLoading"
+                    class="btn btn-wide shadow-lg transition-all"
+                    :class="isLoteReadyToFinish ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-emerald-200' : 'btn-disabled bg-slate-100 text-slate-400'">
+                <span v-if="confLoading" class="loading loading-spinner loading-xs"></span>
+                <span v-else><i class="fa-solid fa-check-double mr-2"></i> Finalizar Conferência</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MODO 3: HISTÓRICO COMPLETO -->
+    <div v-else-if="confMode === 'history'" class="flex-1 overflow-y-auto p-8 custom-scroll bg-slate-50">
+        <div class="max-w-6xl mx-auto">
+            <h3 class="text-xl font-bold text-slate-700 mb-6 flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-emerald-500"></i> Histórico de Conferências
+            </h3>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="table w-full">
+                    <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                        <tr>
+                            <th>ID Lote</th>
+                            <th>Data</th>
+                            <th>Computador</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="lote in confCompletedList" :key="lote.id" class="hover:bg-slate-50 border-b border-slate-100">
+                            <td class="font-bold text-slate-700">{{ lote.id }}</td>
+                            <td class="text-slate-500 font-mono text-xs">{{ lote.data }}</td>
+                            <td>
+                                <div class="text-sm font-medium text-slate-800">{{ lote.pcs[0]?.nome || 'N/A' }}</div>
+                                <div class="text-xs text-slate-400">{{ lote.pcs[0]?.itens.length || 0 }} itens conferidos</div>
+                            </td>
+                            <td>
+                                <span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase border border-emerald-200">
+                                    Conferido
+                                </span>
+                            </td>
+                        </tr>
+                        <tr v-if="confCompletedList.length === 0">
+                            <td colspan="5" class="text-center py-8 text-slate-400 italic">Nenhum histórico encontrado.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
