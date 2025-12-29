@@ -1,0 +1,139 @@
+<script>
+/**
+ * Lógica isolada para o módulo de Conferência.
+ */
+const useConference = (toasts, mockRunner) => {
+    const { ref, computed } = Vue;
+    
+    // STATES
+    const confPendingList = ref([]);
+    const confCompletedList = ref([]);
+    const confLoading = ref(false);
+    
+    // MODO: 'list' (dashboard), 'check' (conferência ativa), 'history' (histórico)
+    const confMode = ref('list'); 
+    const confSelectedLote = ref(null);
+    const confSelectedPC = ref(null);
+
+    // ACTIONS
+    const fetchConferenceData = () => {
+        confLoading.value = true;
+        const runner = (typeof google !== 'undefined') ? google.script.run : mockRunner();
+        
+        // MOCK DATA (Fallback)
+        if (typeof google === 'undefined') {
+            setTimeout(() => {
+                confPendingList.value = [
+                   { id: 'L-MOCK-PENDING', data: '29/12/2025', status: 'Em andamento', pcs: [{ nome: 'PC Gamer Mock', total: 'R$ 5000', itens: [{descricao: 'CPU', checked: false}, {descricao: 'GPU', checked: false}] }] }
+                ];
+                confCompletedList.value = [];
+                confLoading.value = false;
+            }, 600);
+            return;
+        }
+
+        runner.withSuccessHandler(res => {
+            confPendingList.value = res.pending;
+            confCompletedList.value = res.completed;
+            confLoading.value = false;
+        }).withFailureHandler(err => {
+            toasts.value.push({ id: Date.now(), title: 'Erro', msg: 'Falha ao carregar conferência', type: 'error' });
+            confLoading.value = false;
+        }).getConferenceData();
+    };
+
+    // Navegação
+    const openChecklist = (lote) => {
+        confSelectedLote.value = lote;
+        if(lote.pcs.length > 0) {
+             // Clona para evitar mutação direta antes de salvar
+             confSelectedPC.value = JSON.parse(JSON.stringify(lote.pcs[0])); 
+        }
+        confMode.value = 'check';
+    };
+
+    const openHistory = () => {
+        confMode.value = 'history';
+    };
+
+    const backToConfDashboard = () => {
+        confMode.value = 'list';
+        confSelectedLote.value = null;
+        confSelectedPC.value = null;
+        fetchConferenceData(); // Recarrega para atualizar status
+    };
+
+    // Checklist Logica
+    const toggleCheckItem = (item) => {
+        item.checked = !item.checked;
+    };
+
+    const currentPCProgress = computed(() => {
+        if (!confSelectedPC.value) return 0;
+        const total = confSelectedPC.value.itens.length;
+        if (total === 0) return 100;
+        const checked = confSelectedPC.value.itens.filter(i => i.checked).length;
+        return Math.round((checked / total) * 100);
+    });
+
+    const isLoteReadyToFinish = computed(() => {
+        return currentPCProgress.value === 100;
+    });
+
+    const finishConference = () => {
+        if (!confSelectedLote.value) return;
+        
+        if (!confirm(`Confirmar que todos os itens foram verificados fisicamente?`)) return;
+
+        confLoading.value = true;
+        const runner = (typeof google !== 'undefined') ? google.script.run : mockRunner();
+        
+        const loteId = confSelectedLote.value.id;
+        const pcName = confSelectedPC.value ? confSelectedPC.value.nome : 'PC Padrão';
+
+        if (typeof google === 'undefined') {
+             setTimeout(() => {
+                 toasts.value.push({ id: Date.now(), title: 'Sucesso', msg: 'Conferência Finalizada (Mock)', type: 'success' });
+                 confLoading.value = false;
+                 backToConfDashboard();
+             }, 800);
+             return;
+        }
+
+        runner.withSuccessHandler(res => {
+            toasts.value.push({ id: Date.now(), title: 'Concluído', msg: res, type: 'success' });
+            confLoading.value = false;
+            backToConfDashboard();
+        }).withFailureHandler(err => {
+             toasts.value.push({ id: Date.now(), title: 'Erro', msg: err.message, type: 'error' });
+             confLoading.value = false;
+        }).markLoteAsChecked(loteId, pcName);
+    };
+
+    const stats = computed(() => {
+        return {
+            pending: confPendingList.value.length,
+            completed: confCompletedList.value.length,
+            totalItems: confPendingList.value.reduce((acc, l) => acc + l.pcs.reduce((a,p)=>a+p.itens.length,0), 0)
+        };
+    });
+
+    return {
+        confPendingList,
+        confCompletedList,
+        confLoading,
+        confMode,
+        confSelectedLote,
+        confSelectedPC,
+        currentPCProgress,
+        isLoteReadyToFinish,
+        stats,
+        fetchConferenceData,
+        openChecklist,
+        openHistory,
+        backToConfDashboard,
+        toggleCheckItem,
+        finishConference
+    };
+};
+</script>
