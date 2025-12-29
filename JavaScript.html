@@ -1,0 +1,787 @@
+<script>
+    const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+    const app = createApp({
+      setup() {
+        // --- 1. STATES PRINCIPAIS ---
+        const currentView = ref('montagem'); 
+        const loading = ref(true);
+        const saving = ref(false);
+        const errorMsg = ref("");
+        const estoque = ref([]);
+        const toasts = ref([]);
+        
+        // --- 2. CONFIGURAÇÕES COMPARTILHADAS ---
+        const showToast = (msg, type = 'info') => {
+           const id = Date.now();
+           const title = type === 'success' ? 'Sucesso' : (type === 'error' ? 'Erro' : 'Informação');
+           toasts.value.push({ id, msg, type, title });
+           setTimeout(() => {
+              toasts.value = toasts.value.filter(t => t.id !== id);
+           }, 4000);
+        };
+
+        // ACTIONS - MOCK & REAL
+        const mockGoogleRun = () => {
+             return {
+                 withSuccessHandler: (success) => ({
+                     withFailureHandler: (fail) => ({
+                         getEstoqueData: () => { setTimeout(() => { success([]); }, 500); },
+                         salvarLoteNoHistorico: (json) => { setTimeout(() => { success("MOCK: Salvo"); }, 1000); },
+                         salvarRemessaNoHistorico: (json, dest) => { setTimeout(() => { success(`MOCK: Salvo`); }, 1000); },
+                         getHistoricoData: () => { setTimeout(() => { success([]); }, 800); },
+                         excluirLoteHistorico: (id) => { setTimeout(() => success("Excluído"), 500); },
+                         excluirItemHistorico: (id, et) => { setTimeout(() => success("Item removido"), 500); },
+                         getConferenceData: () => { setTimeout(() => { success({pending:[], completed:[]}); }, 500); },
+                         markLoteAsChecked: (id) => { setTimeout(() => { success("MOCK: Conferido"); }, 1000); }
+                     })
+                 })
+             };
+        };
+
+        // --- 3. MÓDULO DE CONFERÊNCIA (INTEGRAÇÃO) ---
+        // Instancia o módulo separado e extrai seus retornos
+        const confProps = useConference(toasts, mockGoogleRun);
+        
+        const carregarConferenciaView = () => {
+            currentView.value = 'conferencia';
+            confProps.fetchConferenceData();
+        };
+
+        // --- 4. STATES & LÓGICA DO RESTANTE DO APP ---
+        
+        // MONTAGEM
+        const search = ref("");
+        const filterSec = ref("");
+        const limit = ref(50);
+        const currentBuild = ref([]); 
+        const batch = ref([]);
+        const pcName = ref("Minha Configuração");
+        
+        const requiredSlots = {
+            'PROCESSADOR': 'fa-microchip',
+            'PLACAS-MÃE': 'fa-chess-board',
+            'VÍDEO': 'fa-display',
+            'COOLER': 'fa-snowflake',
+            'MEMÓRIA': 'fa-memory',
+            'FONTE': 'fa-plug',
+            'HD': 'fa-hard-drive',
+            'SSD': 'fa-bolt',
+            'GABINETE': 'fa-server'
+        };
+
+        const hexPositions = {
+            'PROCESSADOR': { top: '20%', left: '23%' },
+            'PLACAS-MÃE':  { top: '20%', left: '50%' },
+            'VÍDEO':       { top: '20%', left: '77%' },
+            'COOLER':      { top: '50%', left: '23%' },
+            'MEMÓRIA':     { top: '50%', left: '50%' },
+            'FONTE':       { top: '50%', left: '77%' },
+            'HD':          { top: '80%', left: '23%' },
+            'SSD':         { top: '80%', left: '50%' },
+            'GABINETE':    { top: '80%', left: '77%' }
+        };
+
+        const hexColors = {
+            'COOLER': 'bg-cyan-500 shadow-cyan-500/30',
+            'PROCESSADOR': 'bg-orange-500 shadow-orange-500/30',
+            'HD': 'bg-teal-600 shadow-teal-600/30',
+            'PLACAS-MÃE': 'bg-blue-600 shadow-blue-600/30',
+            'GABINETE': 'bg-slate-800 shadow-slate-900/20',
+            'VÍDEO': 'bg-emerald-500 shadow-emerald-500/30',
+            'FONTE': 'bg-yellow-500 shadow-yellow-500/30',
+            'MEMÓRIA': 'bg-purple-600 shadow-purple-600/30',
+            'SSD': 'bg-cyan-600 shadow-cyan-600/30'
+        };
+
+        // REMESSA
+        const searchRemessa = ref("");
+        const filterRemessaCat = ref("");
+        const remessaCart = ref([]);
+        const remessaDestino = ref("");
+        const limitRemessa = ref(100);
+        const remessaNum = ref(parseInt(localStorage.getItem('openbox_last_remessa_id') || '0') + 1);
+
+        // HISTORICO
+        const historicoRaw = ref([]);
+        const searchHistorico = ref("");
+        const historicoTab = ref('remessa'); 
+        const expandedItems = ref([]);
+
+        // DASHBOARD
+        const dashboardType = ref('Montagem');
+        const dashboardRange = ref(30); 
+        const customStartDate = ref("");
+        const customEndDate = ref("");
+        const dailyChartRef = ref(null);
+        const categoryChartRef = ref(null);
+        let dailyChartInstance = null;
+        let categoryChartInstance = null;
+
+        // ... [Mantenha as funções auxiliares existentes: extractSpecs, parseDate, formatMoney, getCategoryStyle, getColorBar] ...
+        
+        const formatMoney = (v) => (v||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+        const getCategoryStyle = (cat) => {
+           if (cat.includes('PROCESSADOR')) return 'bg-orange-100 text-orange-700';
+           if (cat.includes('PLACAS-MÃE')) return 'bg-blue-100 text-blue-700'; 
+           if (cat.includes('VÍDEO')) return 'bg-emerald-100 text-emerald-700';
+           if (cat.includes('MEMÓRIA')) return 'bg-purple-100 text-purple-700';
+           if (cat.includes('FONTE')) return 'bg-yellow-100 text-yellow-700';
+           if (cat.includes('HD') || cat.includes('SSD')) return 'bg-cyan-100 text-cyan-700';
+           return 'bg-slate-100 text-slate-600';
+        };
+        const getColorBar = (cat) => {
+           if (cat.includes('PROCESSADOR')) return 'bg-orange-500';
+           if (cat.includes('PLACAS-MÃE')) return 'bg-blue-600'; 
+           if (cat.includes('VÍDEO')) return 'bg-emerald-500';
+           if (cat.includes('MEMÓRIA')) return 'bg-purple-500';
+           if (cat.includes('HD') || cat.includes('SSD')) return 'bg-cyan-500';
+           return 'bg-slate-400';
+        }
+        
+        const extractSpecs = (item) => {
+            const text = (item.descricao + " " + (item.sub || "")).toUpperCase();
+            let socket = null;
+            if (/\bAM4\b/.test(text)) socket = 'AM4';
+            else if (/\bAM5\b/.test(text)) socket = 'AM5';
+            else if (/\bLGA\s?1700\b/.test(text)) socket = 'LGA1700';
+            else if (/\bLGA\s?1200\b/.test(text)) socket = 'LGA1200';
+            else if (/\bLGA\s?1851\b/.test(text)) socket = 'LGA1851';
+            else if (/\bLGA\s?1151\b/.test(text)) socket = 'LGA1151';
+            
+            let platform = null;
+            if (socket) {
+                if (socket.startsWith('AM')) platform = 'AMD';
+                else if (socket.startsWith('LGA')) platform = 'INTEL';
+            }
+            if (!platform) {
+                if (text.includes('INTEL') || text.includes('CORE I') || text.includes('LGA')) platform = 'INTEL';
+                else if (text.includes('AMD') || text.includes('RYZEN') || text.includes('AM4') || text.includes('AM5')) platform = 'AMD';
+            }
+            let ddr = null;
+            if (/\bDDR5\b/.test(text)) ddr = 'DDR5';
+            else if (/\bDDR4\b/.test(text)) ddr = 'DDR4';
+            else if (/\bDDR3\b/.test(text)) ddr = 'DDR3';
+            
+            if (!socket) {
+                if (/\bRYZEN\s?[579]\s?[789]\d{3}/.test(text)) { socket = 'AM5'; platform = 'AMD'; }
+                else if (/\bRYZEN\s?[357]\s?[12345]\d{3}/.test(text)) { socket = 'AM4'; platform = 'AMD'; }
+                else if (/\b12[14679]00/.test(text) || /\b13[14679]00/.test(text) || /\b14[14679]00/.test(text)) { socket = 'LGA1700'; platform = 'INTEL'; }
+                else if (/\b10[14]00/.test(text) || /\b11[14]00/.test(text)) { socket = 'LGA1200'; platform = 'INTEL'; }
+            }
+            return { socket, ddr, platform };
+        };
+        const parseDate = (str) => {
+            if (!str) return new Date();
+            if (str.includes('/')) {
+                const [datePart, timePart] = str.split(' ');
+                const [d, m, y] = datePart.split('/');
+                return new Date(y, m - 1, d);
+            }
+            return new Date(str);
+        };
+
+        // --- COMPUTED PROPERTIES DO APP PRINCIPAL ---
+        const estoqueDisponivel = computed(() => {
+          if (!estoque.value) return [];
+          const usedTags = new Set();
+          currentBuild.value.forEach(buildItem => usedTags.add(buildItem.etiqueta));
+          batch.value.forEach(pc => pc.pecas.forEach(i => usedTags.add(i.etiqueta)));
+          remessaCart.value.forEach(i => usedTags.add(i.etiqueta));
+          return estoque.value.filter(i => {
+             const isAvailable = i.status === 'Disponível' && (!i.etiqueta.startsWith('GEN-') ? !usedTags.has(i.etiqueta) : true);
+             if (!isAvailable) return false;
+             if (i.categoria.includes('MEMÓRIA')) {
+                 const descUpper = (i.descricao + " " + (i.sub || "")).toUpperCase();
+                 const forbiddenTerms = ['NOTEBOOK', 'SODIMM', 'SO-DIMM', 'LPDDR', 'PARA NOTEBOOK', 'HUSKY TECHNOLOGIES'];
+                 if (forbiddenTerms.some(term => descUpper.includes(term))) return false;
+             }
+             return true;
+          });
+        });
+
+        const categorias = computed(() => {
+          if (!estoque.value) return [];
+          const cats = new Set(estoque.value.map(i => i.categoria).filter(c => c && c !== "OUTROS"));
+          return Array.from(cats).sort();
+        });
+
+        const listaAgrupadaMontagem = computed(() => {
+          let itens = estoqueDisponivel.value;
+          if (filterSec.value) itens = itens.filter(i => i.categoria.includes(filterSec.value)); 
+          if (search.value) {
+            const t = search.value.toLowerCase();
+            itens = itens.filter(i => i.descricao.toLowerCase().includes(t) || i.codigo.toLowerCase().includes(t));
+          }
+
+          let requiredSocket = null, requiredDdr = null, requiredPlatform = null;
+          const cpu = currentBuild.value.find(i => i.categoria.includes('PROCESSADOR'));
+          const mobo = currentBuild.value.find(i => i.categoria.includes('PLACAS-MÃE'));
+          const rams = currentBuild.value.filter(i => i.categoria.includes('MEMÓRIA'));
+
+          if (cpu) {
+              const specs = extractSpecs(cpu);
+              if (specs.socket) requiredSocket = specs.socket;
+              if (specs.platform) requiredPlatform = specs.platform;
+              if (specs.socket === 'AM4') requiredDdr = 'DDR4';
+              if (specs.socket === 'AM5') requiredDdr = 'DDR5';
+          }
+          if (mobo) {
+              const specs = extractSpecs(mobo);
+              if (specs.socket) requiredSocket = specs.socket;
+              if (specs.platform) requiredPlatform = specs.platform;
+              if (specs.ddr) requiredDdr = specs.ddr;
+              if (!specs.ddr && specs.socket === 'AM4') requiredDdr = 'DDR4';
+              if (!specs.ddr && specs.socket === 'AM5') requiredDdr = 'DDR5';
+          }
+          if (rams.length > 0 && !requiredDdr) {
+              const specs = extractSpecs(rams[0]);
+              if (specs.ddr) requiredDdr = specs.ddr;
+          }
+
+          if (requiredSocket || requiredDdr || requiredPlatform) {
+              itens = itens.filter(item => {
+                  const specs = extractSpecs(item);
+                  const isCpu = item.categoria.includes('PROCESSADOR');
+                  const isMobo = item.categoria.includes('PLACAS-MÃE');
+                  const isRam = item.categoria.includes('MEMÓRIA');
+                  if (isCpu || isMobo) {
+                      if (requiredPlatform && specs.platform && specs.platform !== requiredPlatform) return false;
+                      if (requiredSocket && specs.socket && specs.socket !== requiredSocket) return false;
+                      if (requiredDdr) {
+                          if (specs.ddr && specs.ddr !== requiredDdr) return false;
+                          if (specs.socket === 'AM4' && requiredDdr === 'DDR5') return false;
+                          if (specs.socket === 'AM5' && requiredDdr === 'DDR4') return false;
+                      }
+                  }
+                  if (isRam) {
+                      if (requiredDdr && specs.ddr && specs.ddr !== requiredDdr) return false;
+                  }
+                  return true;
+              });
+          }
+
+          const map = new Map();
+          itens.forEach(i => {
+            const key = i.codigo !== 'N/A' ? i.codigo : i.descricao; 
+            if (!map.has(key)) map.set(key, { ...i, quantidade: 0, itens: [] });
+            const grupo = map.get(key);
+            grupo.quantidade++;
+            grupo.itens.push(i);
+          });
+          return Array.from(map.values()).sort((a, b) => b.quantidade - a.quantidade);
+        });
+
+        const listaPaginadaMontagem = computed(() => listaAgrupadaMontagem.value.slice(0, limit.value));
+        const groupedBuild = computed(() => currentBuild.value);
+        const buildTotal = computed(() => currentBuild.value.reduce((acc, i) => acc + (i.custo * i.qty), 0));
+        const batchTotal = computed(() => batch.value.reduce((acc, pc) => acc + pc.total, 0));
+
+        const estatisticasCategoria = computed(() => {
+           const stats = {};
+           estoqueDisponivel.value.forEach(item => {
+              if(!stats[item.categoria]) stats[item.categoria] = { count: 0, totalValue: 0 };
+              stats[item.categoria].count++;
+              stats[item.categoria].totalValue += item.custo;
+           });
+           return stats;
+        });
+
+        const listaFiltradaRemessa = computed(() => {
+           let itens = estoqueDisponivel.value;
+           if (filterRemessaCat.value) itens = itens.filter(i => i.categoria === filterRemessaCat.value);
+           if (searchRemessa.value) {
+              const t = searchRemessa.value.toLowerCase();
+              itens = itens.filter(i => i.descricao.toLowerCase().includes(t) || i.etiqueta.toLowerCase().includes(t) || i.codigo.toLowerCase().includes(t));
+           }
+           return itens.sort((a,b) => a.descricao.localeCompare(b.descricao)).slice(0, limitRemessa.value);
+        });
+
+        const remessaTotal = computed(() => remessaCart.value.reduce((acc, i) => acc + i.custo, 0));
+
+        const warnings = computed(() => {
+          const w = [];
+          const parts = currentBuild.value;
+          const findCat = (key) => parts.find(p => p.categoria.includes(key));
+          const gpu = findCat('VÍDEO'); const psu = findCat('FONTE');
+          if (gpu && psu) {
+            const getW = (i) => { const m = (i.sub + " " + i.descricao).toUpperCase().match(/(\d{3,4})\s*W/); return m ? parseInt(m[1]) : 0; };
+            const wP = getW(psu);
+            if ((gpu.descricao+gpu.sub).match(/4090|4080|7900/i) && wP > 0 && wP < 750) w.push(`Aviso: Fonte de ${wP}W pode ser fraca para essa GPU.`);
+          }
+          return w;
+        });
+
+        const printModeClass = computed(() => {
+           if (currentView.value === 'montagem') return 'printing-montagem';
+           if (currentView.value === 'remessa') return 'printing-remessa';
+           return '';
+        });
+
+        const historicoList = computed(() => {
+            const groups = {};
+            historicoRaw.value.forEach(item => {
+                const id = item.idLote || 'N/A';
+                if (!groups[id]) {
+                    groups[id] = {
+                        idLote: id,
+                        dataHora: item.dataHora, 
+                        tipo: item.idLote.startsWith('L-') ? 'Montagem' : 'Remessa',
+                        itens: [],
+                        total: 0,
+                        destino: item.destino 
+                    };
+                }
+                groups[id].itens.push(item);
+                groups[id].total += (item.custo || 0);
+            });
+            let list = Object.values(groups).sort((a,b) => b.idLote.localeCompare(a.idLote));
+            if (historicoTab.value === 'remessa') list = list.filter(g => g.tipo === 'Remessa');
+            else if (historicoTab.value === 'montagem') list = list.filter(g => g.tipo === 'Montagem');
+            if (searchHistorico.value) {
+                const t = searchHistorico.value.toLowerCase();
+                list = list.filter(g => g.idLote.toLowerCase().includes(t) || g.dataHora.toLowerCase().includes(t));
+            }
+            return list;
+        });
+
+        const dashboardFilteredItems = computed(() => {
+            if (dashboardRange.value === 'custom') {
+                const start = customStartDate.value ? new Date(customStartDate.value + 'T00:00:00') : new Date(0);
+                const end = customEndDate.value ? new Date(customEndDate.value + 'T23:59:59') : new Date();
+                return historicoRaw.value.filter(item => {
+                    if (item.tipo !== dashboardType.value) return false;
+                    const itemDate = parseDate(item.dataHora);
+                    return itemDate >= start && itemDate <= end;
+                });
+            }
+            const now = new Date();
+            const limitDate = new Date();
+            limitDate.setDate(now.getDate() - dashboardRange.value);
+            return historicoRaw.value.filter(item => {
+                if (item.tipo !== dashboardType.value) return false;
+                const itemDate = parseDate(item.dataHora);
+                return itemDate >= limitDate;
+            });
+        });
+
+        const dashboardKpis = computed(() => {
+            const items = dashboardFilteredItems.value;
+            const totalValue = items.reduce((acc, i) => acc + (i.custo || 0), 0);
+            const uniqueLotes = new Set(items.map(i => i.idLote));
+            const count = uniqueLotes.size;
+            return { totalValue, count, avgTicket: count ? totalValue / count : 0 };
+        });
+
+        const dashboardDailyChart = computed(() => {
+            const items = dashboardFilteredItems.value;
+            const groups = {}; 
+            const loteDates = {};
+            items.forEach(i => { loteDates[i.idLote] = parseDate(i.dataHora); });
+            Object.values(loteDates).forEach(date => {
+                const key = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                groups[key] = (groups[key] || 0) + 1;
+            });
+            return Object.entries(groups).sort((a,b) => {
+               const [da, ma] = a[0].split('/'); const [db, mb] = b[0].split('/');
+               return new Date(2024, ma-1, da) - new Date(2024, mb-1, db);
+            }).map(([dateShort, count]) => ({ dateShort, count }));
+        });
+
+        const dashboardCategoryStats = computed(() => {
+            const items = dashboardFilteredItems.value;
+            const groups = {};
+            items.forEach(i => {
+                const cat = i.categoria || 'OUTROS';
+                if (!groups[cat]) groups[cat] = { name: cat, count: 0, value: 0 };
+                groups[cat].count++;
+                groups[cat].value += (i.custo || 0);
+            });
+            return Object.values(groups).sort((a,b) => b.value - a.value);
+        });
+
+        const dashboardMonthlyStats = computed(() => {
+            const items = dashboardFilteredItems.value;
+            const groups = {}; 
+            items.forEach(i => {
+                const d = parseDate(i.dataHora);
+                const key = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                if (!groups[key]) groups[key] = { label: key, count: 0, value: 0, lotes: new Set() };
+                groups[key].value += (i.custo || 0);
+                groups[key].lotes.add(i.idLote);
+            });
+            return Object.values(groups).map(g => ({
+                label: g.label.charAt(0).toUpperCase() + g.label.slice(1),
+                value: g.value,
+                count: g.lotes.size
+            }));
+        });
+
+        // --- MÉTODOS DO APP PRINCIPAL ---
+        const updateCharts = () => {
+            if (!currentView.value === 'dashboard') return;
+            if (dailyChartInstance) dailyChartInstance.destroy();
+            if (dailyChartRef.value) {
+                const data = dashboardDailyChart.value;
+                dailyChartInstance = new Chart(dailyChartRef.value, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.dateShort),
+                        datasets: [{ label: 'Volume', data: data.map(d => d.count), backgroundColor: 'rgba(168, 85, 247, 0.7)', borderColor: 'rgba(168, 85, 247, 1)', borderWidth: 1, borderRadius: 4 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } } }
+                });
+            }
+            if (categoryChartInstance) categoryChartInstance.destroy();
+            if (categoryChartRef.value) {
+                const data = dashboardCategoryStats.value.slice(0, 8); 
+                categoryChartInstance = new Chart(categoryChartRef.value, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.name),
+                        datasets: [{ label: 'Valor (R$)', data: data.map(d => d.value), backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1, borderRadius: 4 }]
+                    },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: '#f3f4f6' } }, y: { grid: { display: false } } } }
+                });
+            }
+        };
+
+        watch([currentView, dashboardType, dashboardRange, customStartDate, customEndDate, historicoRaw], () => {
+            if (currentView.value === 'dashboard') nextTick(updateCharts);
+        });
+
+        // --- FETCHERS ---
+        const fetchHistoricoData = () => {
+             loading.value = true;
+             const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+             runner.withSuccessHandler(d => { historicoRaw.value = d; loading.value = false; })
+                   .withFailureHandler(e => { showToast("Erro ao carregar histórico: " + e.message, 'error'); loading.value = false; })
+                   .getHistoricoData();
+        };
+
+        const carregarEstoque = () => {
+          loading.value = true; errorMsg.value = "";
+          const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+          runner.withSuccessHandler(d => { estoque.value = d; loading.value = false; showToast('Estoque sincronizado', 'success'); })
+                .withFailureHandler(e => { errorMsg.value = e.message; loading.value = false; showToast('Erro ao carregar', 'error'); })
+                .getEstoqueData();
+        };
+
+        const carregarHistoricoView = () => {
+            if (currentView.value !== 'dashboard') currentView.value = 'historico';
+            fetchHistoricoData(); 
+        };
+
+        const goToDashboard = () => {
+            currentView.value = 'dashboard';
+            fetchHistoricoData();
+        };
+
+        const toggleDetails = (id) => {
+            if (expandedItems.value.includes(id)) expandedItems.value = expandedItems.value.filter(itemId => itemId !== id);
+            else expandedItems.value.push(id);
+        };
+
+        const deleteLote = (idLote) => {
+            if(!confirm(`Excluir ${idLote}?`)) return;
+            loading.value = true;
+            const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+            runner.withSuccessHandler(r => { 
+                showToast(r, 'success'); 
+                historicoRaw.value = historicoRaw.value.filter(i => i.idLote !== idLote);
+                loading.value = false; 
+            }).withFailureHandler(e => { showToast(e.message, 'error'); loading.value = false; })
+            .excluirLoteHistorico(idLote);
+        };
+
+        const deleteItemHistorico = (idLote, item) => {
+            if(!confirm(`Remover ${item.descricao}?`)) return;
+            const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+            runner.withSuccessHandler(r => {
+                showToast(r, 'success');
+                const idx = historicoRaw.value.findIndex(i => i.idLote === idLote && i.etiqueta === item.etiqueta);
+                if(idx !== -1) historicoRaw.value.splice(idx, 1);
+            }).withFailureHandler(e => showToast(e.message, 'error'))
+            .excluirItemHistorico(idLote, item.etiqueta);
+        };
+
+        const exportHistoricoLote = (lote) => {
+            const data = lote.itens.map(item => ({
+                ID_Lote: lote.idLote, Data: lote.dataHora, Destino: lote.destino || '-',
+                Codigo: item.codigo, Descricao: item.descricao, Categoria: item.categoria, Etiqueta: item.etiqueta, Custo: item.custo
+            }));
+            const headers = Object.keys(data[0]);
+            const csvContent = [headers.join(','), ...data.map(row => headers.map(fieldName => JSON.stringify(row[fieldName])).join(','))].join('\r\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `historico_${lote.idLote}.csv`;
+            link.click();
+            showToast('Histórico exportado', 'success');
+        };
+
+        const checkCompatibility = (newItem, currentItems) => {
+            const newSpecs = extractSpecs(newItem);
+            const isCpu = newItem.categoria.includes('PROCESSADOR');
+            const isMobo = newItem.categoria.includes('PLACAS-MÃE');
+            const isRam = newItem.categoria.includes('MEMÓRIA');
+
+            if (isCpu || isMobo) {
+                const targetCat = isCpu ? 'PLACAS-MÃE' : 'PROCESSADOR';
+                const existing = currentItems.find(i => i.categoria.includes(targetCat));
+                
+                if (existing) {
+                    const existingSpecs = extractSpecs(existing);
+                    if (newSpecs.platform && existingSpecs.platform && newSpecs.platform !== existingSpecs.platform) {
+                        return { valid: false, msg: `INCOMPATÍVEL: ${newSpecs.platform} vs ${existingSpecs.platform}.` };
+                    }
+                    if (newSpecs.socket && existingSpecs.socket && newSpecs.socket !== existingSpecs.socket) {
+                        return { valid: false, msg: `INCOMPATÍVEL: ${newSpecs.socket} não encaixa em ${existingSpecs.socket}.` };
+                    }
+                }
+            }
+
+            if (isMobo || isRam) {
+                let mobo = isMobo ? newItem : currentItems.find(i => i.categoria.includes('PLACAS-MÃE'));
+                let rams = isRam ? [newItem] : currentItems.filter(i => i.categoria.includes('MEMÓRIA'));
+                
+                if (mobo && rams.length > 0) {
+                    const moboSpecs = extractSpecs(mobo);
+                    if (moboSpecs.socket === 'AM5') moboSpecs.ddr = 'DDR5';
+                    if (moboSpecs.socket === 'AM4') moboSpecs.ddr = 'DDR4';
+
+                    if (moboSpecs.ddr) {
+                        for (const ram of rams) {
+                            const ramSpecs = extractSpecs(ram);
+                            if (ramSpecs.ddr && moboSpecs.ddr !== ramSpecs.ddr) {
+                                return { valid: false, msg: `INCOMPATÍVEL: Placa (${moboSpecs.ddr}) não aceita RAM ${ramSpecs.ddr}.` };
+                            }
+                        }
+                    }
+                }
+            }
+            return { valid: true };
+        };
+
+        const adicionarAoPC = (grupo) => {
+          const item = grupo.itens[0];
+          if(!item) return;
+
+          const compat = checkCompatibility(item, currentBuild.value);
+          if (!compat.valid) {
+              showToast(compat.msg, 'error');
+              return;
+          }
+
+          const existingItemIndex = currentBuild.value.findIndex(i => i.codigo === item.codigo);
+
+          if (existingItemIndex !== -1) {
+             updateQty(currentBuild.value[existingItemIndex], 1);
+          } else {
+             const slotKeys = Object.keys(requiredSlots);
+             const slot = slotKeys.find(key => item.categoria.includes(key));
+             const isSingleSlot = ['PROCESSADOR', 'PLACAS-MÃE', 'GABINETE', 'FONTE', 'VÍDEO'].includes(slot);
+
+             if (isSingleSlot) {
+                 const existingSlotItemIndex = currentBuild.value.findIndex(i => i.categoria.includes(slot));
+                 if (existingSlotItemIndex !== -1) {
+                     if (!confirm(`Substituir peça atual?`)) return;
+                     currentBuild.value.splice(existingSlotItemIndex, 1);
+                 }
+             }
+             
+             const usedInOthers = new Set();
+             batch.value.forEach(pc => pc.pecas.forEach(p => usedInOthers.add(p.etiqueta)));
+             remessaCart.value.forEach(p => usedInOthers.add(p.etiqueta));
+             const totalStock = estoque.value.filter(e => 
+                 e.codigo === item.codigo && 
+                 e.status === 'Disponível' && 
+                 !usedInOthers.has(e.etiqueta)
+             ).length;
+
+             if (1 > totalStock) {
+                 showToast(`Estoque insuficiente. Apenas ${totalStock} disponível.`, 'error');
+                 return;
+             }
+
+             currentBuild.value.push({ ...item, qty: 1 });
+             showToast(`${item.descricao} adicionado`, 'success');
+             
+             if (currentBuild.value.length === 1 && pcName.value === "Minha Configuração") {
+                 autoName();
+             }
+          }
+        };
+
+        const updateQty = (item, change) => {
+            const idx = currentBuild.value.indexOf(item);
+            if (idx === -1) return;
+            const newQty = item.qty + change;
+            
+            if (change > 0) {
+                 const usedInOthers = new Set();
+                 batch.value.forEach(pc => pc.pecas.forEach(p => usedInOthers.add(p.etiqueta)));
+                 remessaCart.value.forEach(p => usedInOthers.add(p.etiqueta));
+                 const totalStock = estoque.value.filter(e => 
+                     e.codigo === item.codigo && 
+                     e.status === 'Disponível' && 
+                     !usedInOthers.has(e.etiqueta)
+                 ).length;
+                 if (newQty > totalStock) {
+                     showToast(`Estoque insuficiente. Máximo: ${totalStock}`, 'error');
+                     return;
+                 }
+            }
+
+            if (newQty <= 0) {
+                if (confirm(`Remover item?`)) currentBuild.value.splice(idx, 1);
+            } else {
+                item.qty = newQty;
+            }
+        };
+
+        const removePartByItem = (item) => {
+            const idx = currentBuild.value.indexOf(item);
+            if (idx > -1) currentBuild.value.splice(idx, 1);
+        }
+        
+        const removePartBySlot = (slotKey) => {
+            const item = currentBuild.value.find(i => i.categoria.includes(slotKey));
+            if(item) removePartByItem(item);
+        }
+
+        const hasPart = (slotKey) => {
+            return currentBuild.value.some(i => i.categoria.includes(slotKey));
+        }
+        const getPartName = (slotKey) => {
+            const parts = currentBuild.value.filter(i => i.categoria.includes(slotKey));
+            if (parts.length === 0) return '';
+            if (parts.length === 1) return parts[0].descricao;
+            return `${parts.length} itens (ver lista)`;
+        }
+        
+        const getHexPosition = (slotKey) => {
+             return hexPositions[slotKey] || { top: '50%', left: '50%' };
+        }
+        
+        const getHexColor = (slotKey) => {
+             return hexColors[slotKey] || 'bg-slate-800 shadow-slate-900/20';
+        }
+        
+        const getSlotShortName = (slot) => {
+            const shorts = {
+                'COOLER': 'Cooler', 'PROCESSADOR': 'CPU', 'HD': 'HDD', 
+                'PLACAS-MÃE': 'Mobo', 'GABINETE': 'Case', 'VÍDEO': 'GPU',
+                'FONTE': 'Fonte', 'MEMÓRIA': 'RAM', 'SSD': 'SSD'
+            };
+            return shorts[slot] || slot;
+        }
+
+        const autoName = () => {
+          const cpu = currentBuild.value.find(i => i.categoria.includes('PROCESSADOR'));
+          const gpu = currentBuild.value.find(i => i.categoria.includes('VÍDEO'));
+          let n = "PC Custom";
+          if (cpu) n = "PC " + (cpu.descricao.match(/Ryzen\s\d|i\d/i)?.[0] || "CPU");
+          if (gpu) n += " + " + (gpu.descricao.match(/RTX\s\d{4}|RX\s\d{4}|GTX\s\d{4}/i)?.[0] || "GPU");
+          pcName.value = n;
+        };
+        
+        const addToBatch = () => { 
+          if(!pcName.value) pcName.value = "Configuração " + new Date().toLocaleTimeString();
+          if(!currentBuild.value.length) return;
+          const expandedPecas = [];
+          currentBuild.value.forEach(item => {
+              for(let k=0; k<item.qty; k++) {
+                  expandedPecas.push({ ...item }); 
+              }
+          });
+          batch.value.push({ nome: pcName.value, pecas: expandedPecas, total: buildTotal.value }); 
+          currentBuild.value = []; pcName.value = "Minha Configuração"; 
+          showToast('Configuração adicionada ao lote', 'success');
+        };
+        
+        const removeFromBatch = (i) => batch.value.splice(i, 1);
+
+        const saveBatch = () => {
+          if (!confirm("Confirmar saída do lote de montagem?")) return; 
+          saving.value = true;
+          const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+          runner.withSuccessHandler(r => { 
+                showToast(r, 'success'); 
+                batch.value=[]; 
+                carregarEstoque(); 
+                saving.value=false; 
+            })
+            .withFailureHandler(e => { showToast("Erro: "+e.message, 'error'); saving.value=false; })
+            .salvarLoteNoHistorico(JSON.stringify(batch.value.map(pc => ({ nome:pc.nome, total:pc.total, pecas:pc.pecas.map(p=>({codigo:p.codigo, etiqueta:p.etiqueta, descricao:p.descricao, categoria:p.categoria, sub:p.sub, endereco:p.endereco, custo:p.custo})) }))));
+        };
+        
+        const printBatch = () => window.print();
+
+        const addToRemessa = (item) => {
+           remessaCart.value.push(item);
+           showToast(`${item.codigo} adicionado`, 'info');
+        };
+
+        const saveRemessa = () => {
+           if (!remessaDestino.value) { showToast("Informe o destino da remessa.", 'error'); return; }
+           if (!confirm(`Confirmar transferência de ${remessaCart.value.length} itens para "${remessaDestino.value}"?`)) return;
+           saving.value = true;
+           const dadosRemessa = JSON.stringify(remessaCart.value.map(p => ({
+              codigo:p.codigo, etiqueta:p.etiqueta, descricao:p.descricao, categoria:p.categoria, sub:p.sub, endereco:p.endereco, custo:p.custo
+           })));
+           const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+           runner.withSuccessHandler(r => { 
+               showToast(r, 'success');
+               localStorage.setItem('openbox_last_remessa_id', remessaNum.value);
+               remessaNum.value++; 
+               remessaCart.value=[]; 
+               remessaDestino.value=""; 
+               carregarEstoque(); 
+               saving.value=false; 
+            })
+            .withFailureHandler(e => { showToast("Erro: "+e.message, 'error'); saving.value=false; })
+            .salvarRemessaNoHistorico(dadosRemessa, remessaDestino.value);
+        };
+
+        const printRemessa = () => window.print();
+
+        const exportToCSV = () => {
+            const data = remessaCart.value.map(item => ({
+                Codigo: item.codigo,
+                Descricao: item.descricao,
+                Categoria: item.categoria,
+                Etiqueta: item.etiqueta,
+                Custo: item.custo
+            }));
+            const headers = Object.keys(data[0]);
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(fieldName => JSON.stringify(row[fieldName])).join(','))
+            ].join('\r\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `remessa_${remessaNum.value}.csv`;
+            link.click();
+            showToast('Arquivo CSV gerado', 'success');
+        };
+
+        onMounted(() => {
+            carregarEstoque();
+        });
+
+        return { 
+           estoque, loading, errorMsg, saving, currentView, printModeClass, carregarEstoque, formatMoney, getCategoryStyle, getColorBar, estoqueDisponivel,
+           search, filterSec, categorias, listaAgrupadaMontagem, listaPaginadaMontagem, limit, currentBuild, batch, pcName, warnings, buildTotal, batchTotal, 
+           adicionarAoPC, removePartByItem, autoName, addToBatch, removeFromBatch, saveBatch, printBatch,
+           searchRemessa, filterRemessaCat, limitRemessa, remessaCart, remessaDestino, estatisticasCategoria, listaFiltradaRemessa, remessaTotal, remessaNum,
+           addToRemessa, saveRemessa, printRemessa, toasts, exportToCSV,
+           carregarHistoricoView, historicoList, searchHistorico, deleteLote, deleteItemHistorico, exportHistoricoLote, historicoTab, toggleDetails, expandedItems,
+           requiredSlots, hasPart, getPartName, removePartBySlot, groupedBuild, updateQty, getHexPosition, getHexColor, getSlotShortName,
+           goToDashboard, dashboardType, dashboardRange, dashboardKpis, dashboardDailyChart, dashboardCategoryStats, dashboardMonthlyStats,
+           dailyChartRef, categoryChartRef, customStartDate, customEndDate, carregarConferenciaView, ...confProps
+        };
+      }
+    }).mount('#app');
+</script>
