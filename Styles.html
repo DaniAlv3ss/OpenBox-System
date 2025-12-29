@@ -1,0 +1,154 @@
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            kabum: '#FF6500',
+            kabumDark: '#CC5200',
+            kabumBlue: '#0060B1',
+            kabumBlueDark: '#004C8C',
+            surface: '#FFFFFF',
+            background: '#F3F4F6'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+</script>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; color: #1F2937; }
+    
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background-color: #94A3B8; }
+    
+    .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card-shadow:hover { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); transform: translateY(-4px); }
+
+    /* --- ESTILO HEXAGONAL OTIMIZADO --- */
+    .hex-grid {
+      position: relative;
+      width: 400px;
+      height: 320px; 
+      margin: 10px auto;
+    }
+    
+    .hex-wrapper {
+      position: absolute;
+      width: 90px;
+      height: 78px; 
+      transform: translate(-50%, -50%);
+      transition: all 0.2s ease;
+      z-index: 10;
+    }
+    
+    .hex-wrapper:hover {
+      z-index: 50;
+      transform: translate(-50%, -50%) scale(1.15);
+    }
+
+    .hex-shape {
+      width: 100%;
+      height: 100%;
+      clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.05);
+    }
+
+    .hex-empty {
+      background-color: #F1F5F9;
+      color: #94A3B8;
+      position: relative;
+    }
+    
+    .hex-empty::after {
+        content: "";
+        position: absolute;
+        top: 2px; left: 2px; right: 2px; bottom: 2px;
+        background-color: #F8FAFC;
+        clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+        z-index: -1;
+    }
+    .hex-empty:hover {
+      background-color: #FFEDD5;
+      color: #FF6500;
+    }
+    .hex-empty:hover::after { background-color: #FFF7ED; }
+
+    .hex-filled {
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .hex-remove {
+      position: absolute;
+      top: 2px;
+      right: 15px;
+      width: 16px;
+      height: 16px;
+      background: #EF4444;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      cursor: pointer;
+      z-index: 60;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .hex-wrapper:hover .hex-remove { opacity: 1; }
+
+    .hex-tooltip {
+      position: absolute;
+      bottom: -45px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 70;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      text-align: center;
+      width: max-content;
+      max-width: 180px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .hex-wrapper:hover .hex-tooltip { opacity: 1; bottom: -55px; }
+
+    .toast-enter-active, .toast-leave-active { transition: all 0.5s ease; }
+    .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(30px); }
+
+    @media print {
+      .no-print, aside { display: none !important; }
+      body, #app { 
+        display: block !important; 
+        height: auto !important; 
+        overflow: visible !important; 
+        background: white !important;
+        position: static !important;
+      }
+      @page { margin: 0.5cm; size: A4; }
+      .print-only { display: none; }
+      body.printing-montagem .print-montagem { display: block !important; }
+      body.printing-remessa .print-remessa { display: block !important; }
+    }
+    .print-only { display: none; }
+</style>
