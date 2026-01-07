@@ -17,8 +17,9 @@
   <!-- Inclusão do CSS -->
   <?!= include('Styles'); ?>
   
-  <!-- Inclusão da Lógica de Conferência (Modular) -->
+  <!-- MÓDULOS JAVASCRIPT (Lógica separada) -->
   <?!= include('ConferenceJS'); ?>
+  <?!= include('AdminJS'); ?>
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
 
@@ -45,15 +46,15 @@
       <div v-if="loading" class="flex flex-col items-center">
         <span class="loading loading-infinity loading-lg text-kabum scale-150 mb-4"></span>
         <h2 class="text-2xl font-bold text-slate-800 tracking-tight">A Sincronizar Sistema...</h2>
-        <p class="text-slate-500 mt-2">A carregar dados do inventário em tempo real</p>
+        <p class="text-slate-500 mt-2">Verificando permissões e estoque em tempo real</p>
       </div>
       <div v-else class="max-w-md bg-white p-8 rounded-2xl shadow-2xl border border-red-100">
         <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <i class="fa-solid fa-triangle-exclamation text-2xl text-red-500"></i>
+          <i class="fa-solid fa-user-lock text-2xl text-red-500"></i>
         </div>
-        <h3 class="text-xl font-bold text-slate-800 mb-2">Erro de Conexão</h3>
+        <h3 class="text-xl font-bold text-slate-800 mb-2">Acesso Negado ou Erro</h3>
         <p class="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded border border-slate-200 font-mono">{{ errorMsg }}</p>
-        <button @click="carregarEstoque" class="btn btn-kabum w-full text-white shadow-lg shadow-orange-200">Tentar Novamente</button>
+        <button @click="window.location.reload()" class="btn btn-kabum w-full text-white shadow-lg shadow-orange-200">Recarregar</button>
       </div>
     </div>
 
@@ -64,7 +65,8 @@
       </div>
 
       <nav class="flex flex-col gap-4 w-full px-2">
-         <button @click="currentView = 'montagem'" 
+         <!-- MENU DE MONTAGEM -->
+         <button @click="currentView = 'montagem'" v-if="userPermissions.canViewMontagem || isAdmin"
                  class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
                  :class="currentView === 'montagem' ? 'bg-slate-800 text-kabum shadow-lg shadow-orange-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
                  title="Montagem">
@@ -73,8 +75,8 @@
             <div v-if="currentView === 'montagem'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabum rounded-r-full"></div>
          </button>
 
-         <!-- BOTÃO CONFERÊNCIA -->
-         <button @click="carregarConferenciaView" 
+         <!-- MENU CONFERÊNCIA -->
+         <button @click="carregarConferenciaView" v-if="userPermissions.canViewConferencia || isAdmin"
                  class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
                  :class="currentView === 'conferencia' ? 'bg-slate-800 text-indigo-500 shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
                  title="Conferência">
@@ -83,7 +85,8 @@
             <div v-if="currentView === 'conferencia'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-500 rounded-r-full"></div>
          </button>
 
-         <button @click="currentView = 'remessa'" 
+         <!-- MENU REMESSA -->
+         <button @click="currentView = 'remessa'" v-if="userPermissions.canViewRemessa || isAdmin"
                  class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
                  :class="currentView === 'remessa' ? 'bg-slate-800 text-kabumBlue shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
                  title="Remessa">
@@ -92,7 +95,8 @@
             <div v-if="currentView === 'remessa'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabumBlue rounded-r-full"></div>
          </button>
 
-         <button @click="carregarHistoricoView" 
+         <!-- MENU HISTÓRICO -->
+         <button @click="carregarHistoricoView" v-if="userPermissions.canViewHistorico || isAdmin"
                  class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
                  :class="currentView === 'historico' ? 'bg-slate-800 text-emerald-500 shadow-lg shadow-emerald-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
                  title="Histórico">
@@ -101,6 +105,7 @@
             <div v-if="currentView === 'historico'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 rounded-r-full"></div>
          </button>
 
+         <!-- MENU DASHBOARD -->
          <button @click="goToDashboard"
                  class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
                  :class="currentView === 'dashboard' ? 'bg-slate-800 text-purple-500 shadow-lg shadow-purple-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
@@ -109,6 +114,19 @@
             <span class="text-[9px] font-bold uppercase tracking-wider">Dash</span>
             <div v-if="currentView === 'dashboard'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-purple-500 rounded-r-full"></div>
          </button>
+
+         <!-- MENU ADMIN (SÓ APARECE SE FOR ADMIN) -->
+         <div v-if="isAdmin" class="w-full h-px bg-slate-800 my-1"></div>
+         <button v-if="isAdmin"
+                 @click="goToAdmin"
+                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                 :class="currentView === 'admin' ? 'bg-red-900/30 text-red-500 shadow-lg shadow-red-900/10 border border-red-900/50' : 'text-red-400/60 hover:text-red-400 hover:bg-red-900/20'"
+                 title="Painel Admin">
+            <i class="fa-solid fa-shield-halved text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+            <span class="text-[9px] font-bold uppercase tracking-wider">Admin</span>
+            <div v-if="currentView === 'admin'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-red-500 rounded-r-full"></div>
+         </button>
+
       </nav>
 
       <div class="mt-auto flex flex-col gap-4 w-full px-2">
@@ -130,6 +148,7 @@
               <span v-else-if="currentView === 'conferencia'">Conferência de Qualidade</span>
               <span v-else-if="currentView === 'remessa'">Controlo de Logística</span>
               <span v-else-if="currentView === 'historico'">Histórico de Operações</span>
+              <span v-else-if="currentView === 'admin'" class="text-red-500"><i class="fa-solid fa-lock mr-1"></i> Acesso Administrativo</span>
               <span v-else>Dashboard Analítico</span>
            </span>
          </div>
@@ -294,7 +313,7 @@
            </aside>
         </div>
   
-        <!-- VIEW 2: CONFERÊNCIA (NOVO) -->
+        <!-- VIEW 2: CONFERÊNCIA -->
         <?!= include('Conference'); ?>
 
         <!-- VIEW 3: REMESSA -->
@@ -472,7 +491,7 @@
                             <div class="text-right mr-4"><div class="text-[10px] uppercase font-bold text-slate-400">Valor Total</div><div class="font-black text-lg text-slate-700">{{ formatMoney(lote.total) }}</div></div>
                             <div class="flex gap-2">
                                 <button @click.stop="exportHistoricoLote(lote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-emerald-600" title="Exportar CSV"><i class="fa-solid fa-file-csv text-lg"></i></button>
-                                <button @click.stop="deleteLote(lote.idLote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-red-600 hover:bg-red-50" title="Excluir Lote Inteiro"><i class="fa-solid fa-trash-can text-lg"></i></button>
+                                <button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteLote(lote.idLote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-red-600 hover:bg-red-50" title="Excluir Lote Inteiro"><i class="fa-solid fa-trash-can text-lg"></i></button>
                                 <button class="btn btn-sm btn-ghost text-slate-400"><i class="fa-solid transition-transform duration-300" :class="expandedItems.includes(lote.idLote) ? 'fa-chevron-up' : 'fa-chevron-down'"></i></button>
                             </div>
                         </div>
@@ -480,7 +499,7 @@
                     <div v-if="expandedItems.includes(lote.idLote)" class="bg-white border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
                         <table class="table table-sm w-full text-xs">
                             <thead class="bg-slate-50 text-slate-500 font-bold uppercase"><tr><th class="pl-6">Código</th><th>Etiqueta</th><th>Descrição</th><th>Local</th><th class="text-right">Custo</th><th class="text-center w-10">Ação</th></tr></thead>
-                            <tbody><tr v-for="item in lote.itens" :key="item.etiqueta + item.codigo" class="hover:bg-slate-50 border-b border-slate-100 last:border-0"><td class="pl-6 font-mono text-slate-500">{{ item.codigo }}</td><td><span class="badge badge-xs badge-ghost">{{ item.etiqueta }}</span></td><td class="font-medium text-slate-700">{{ item.descricao }}</td><td class="font-mono text-slate-500">{{ item.endereco }}</td><td class="text-right font-bold">{{ formatMoney(item.custo) }}</td><td class="text-center"><button @click.stop="deleteItemHistorico(lote.idLote, item)" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Remover Item"><i class="fa-solid fa-times"></i></button></td></tr></tbody>
+                            <tbody><tr v-for="item in lote.itens" :key="item.etiqueta + item.codigo" class="hover:bg-slate-50 border-b border-slate-100 last:border-0"><td class="pl-6 font-mono text-slate-500">{{ item.codigo }}</td><td><span class="badge badge-xs badge-ghost">{{ item.etiqueta }}</span></td><td class="font-medium text-slate-700">{{ item.descricao }}</td><td class="font-mono text-slate-500">{{ item.endereco }}</td><td class="text-right font-bold">{{ formatMoney(item.custo) }}</td><td class="text-center"><button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteItemHistorico(lote.idLote, item)" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Remover Item"><i class="fa-solid fa-times"></i></button></td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -607,6 +626,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- VIEW ADMIN (MODULARIZADO) -->
+        <?!= include('Admin'); ?>
 
       </div>
     </div>
