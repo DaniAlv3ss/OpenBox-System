@@ -10,7 +10,18 @@
         const errorMsg = ref("");
         const estoque = ref([]);
         const toasts = ref([]);
-        
+        const currentUserEmail = ref("...");
+        const isAdmin = ref(false);
+
+        // VARIÁVEIS DE PERMISSÃO (GRANULAR)
+        const userPermissions = ref({
+            canViewMontagem: false,
+            canViewConferencia: false,
+            canViewRemessa: false,
+            canViewHistorico: false,
+            canEditHistory: false 
+        });
+
         // --- 2. CONFIGURAÇÕES COMPARTILHADAS ---
         const showToast = (msg, type = 'info') => {
            const id = Date.now();
@@ -33,14 +44,17 @@
                          excluirLoteHistorico: (id) => { setTimeout(() => success("Excluído"), 500); },
                          excluirItemHistorico: (id, et) => { setTimeout(() => success("Item removido"), 500); },
                          getConferenceData: () => { setTimeout(() => { success({pending:[], completed:[]}); }, 500); },
-                         markLoteAsChecked: (id) => { setTimeout(() => { success("MOCK: Conferido"); }, 1000); }
+                         markLoteAsChecked: (id) => { setTimeout(() => { success("MOCK: Conferido"); }, 1000); },
+                         getCurrentUserRole: () => { setTimeout(() => { success({email:'admin@mock.com', role:'Admin', isAdmin:true}); }, 500); },
+                         getSystemUsers: () => { setTimeout(() => { success([{email:'admin@mock.com', nome:'Admin Mock', funcao:'Admin', status:'Ativo'}]); }, 500); },
+                         saveSystemUser: () => { setTimeout(() => { success("MOCK: Usuário Salvo"); }, 500); },
+                         verifyAdminAccess: () => { setTimeout(() => { success(true); }, 500); } 
                      })
                  })
              };
         };
 
         // --- 3. MÓDULO DE CONFERÊNCIA (INTEGRAÇÃO) ---
-        // Instancia o módulo separado e extrai seus retornos
         const confProps = useConference(toasts, mockGoogleRun);
         
         const carregarConferenciaView = () => {
@@ -48,7 +62,11 @@
             confProps.fetchConferenceData();
         };
 
-        // --- 4. STATES & LÓGICA DO RESTANTE DO APP ---
+        // --- 4. MÓDULO DE ADMINISTRAÇÃO (INTEGRAÇÃO) ---
+        // Importa a lógica do arquivo AdminJS.html
+        const adminProps = useAdmin(toasts, mockGoogleRun);
+
+        // --- 5. STATES & LÓGICA DO RESTANTE DO APP ---
         
         // MONTAGEM
         const search = ref("");
@@ -118,8 +136,7 @@
         let dailyChartInstance = null;
         let categoryChartInstance = null;
 
-        // ... [Mantenha as funções auxiliares existentes: extractSpecs, parseDate, formatMoney, getCategoryStyle, getColorBar] ...
-        
+        // ... [Auxiliares] ...
         const formatMoney = (v) => (v||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
         const getCategoryStyle = (cat) => {
            if (cat.includes('PROCESSADOR')) return 'bg-orange-100 text-orange-700';
@@ -451,6 +468,84 @@
         });
 
         // --- FETCHERS ---
+        const checkUserRole = () => {
+             const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+             runner.withSuccessHandler(res => {
+                 currentUserEmail.value = res.email;
+                 const role = res.role || '';
+                 
+                 // Lógica de Permissões Baseada na String de Papeis
+                 if (res.isAdmin) {
+                     isAdmin.value = true;
+                     userPermissions.value = {
+                         canViewMontagem: true,
+                         canViewConferencia: true,
+                         canViewRemessa: true,
+                         canViewHistorico: true,
+                         canEditHistory: true
+                     };
+                 } else {
+                     isAdmin.value = false;
+                     userPermissions.value = {
+                         canViewMontagem: role.includes('Montador'),
+                         canViewConferencia: role.includes('Conferente'),
+                         canViewRemessa: role.includes('Logistica'),
+                         canViewHistorico: true, 
+                         canEditHistory: false
+                     };
+                 }
+
+                 if (res.status !== 'Ativo') {
+                     errorMsg.value = "Seu usuário está inativo. Contacte o administrador.";
+                 } else {
+                     if (currentView.value === 'montagem' && !userPermissions.value.canViewMontagem) {
+                         if (userPermissions.value.canViewConferencia) currentView.value = 'conferencia';
+                         else if (userPermissions.value.canViewRemessa) currentView.value = 'remessa';
+                         else currentView.value = 'historico';
+                     }
+                 }
+             }).withFailureHandler(e => { errorMsg.value = "Falha ao validar sessão: " + e.message; })
+             .getCurrentUserRole();
+        };
+
+        // --- LÓGICA DO BOTÃO ADMIN (REFEITA) ---
+        const goToAdmin = () => {
+            // 1. Verificação local instantânea (UX)
+            if (!isAdmin.value) {
+                showToast("Acesso Negado: Você não tem permissão de administrador.", "error");
+                return;
+            }
+
+            loading.value = true; // Ativa overlay
+
+            // Callbacks explícitos para garantir que o loading desligue
+            const onSuccess = () => {
+                loading.value = false;
+                currentView.value = 'admin';
+                // Tenta buscar usuários
+                try {
+                    if (adminProps && typeof adminProps.fetchUsers === 'function') {
+                        adminProps.fetchUsers();
+                    }
+                } catch(e) { console.error(e); }
+            };
+
+            const onFailure = (e) => {
+                loading.value = false; // GARANTE O DESTRAVAMENTO
+                showToast("Acesso Negado: " + (e.message || "Erro desconhecido"), "error");
+                isAdmin.value = false; // Reverte se foi forçado
+            };
+
+            if (typeof google !== 'undefined') {
+                google.script.run
+                    .withSuccessHandler(onSuccess)
+                    .withFailureHandler(onFailure)
+                    .verifyAdminAccess();
+            } else {
+                setTimeout(onSuccess, 500); // Mock
+            }
+        };
+
         const fetchHistoricoData = () => {
              loading.value = true;
              const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
@@ -768,6 +863,8 @@
         };
 
         onMounted(() => {
+            // Verifica permissões assim que a app inicia
+            checkUserRole();
             carregarEstoque();
         });
 
@@ -780,7 +877,9 @@
            carregarHistoricoView, historicoList, searchHistorico, deleteLote, deleteItemHistorico, exportHistoricoLote, historicoTab, toggleDetails, expandedItems,
            requiredSlots, hasPart, getPartName, removePartBySlot, groupedBuild, updateQty, getHexPosition, getHexColor, getSlotShortName,
            goToDashboard, dashboardType, dashboardRange, dashboardKpis, dashboardDailyChart, dashboardCategoryStats, dashboardMonthlyStats,
-           dailyChartRef, categoryChartRef, customStartDate, customEndDate, carregarConferenciaView, ...confProps
+           dailyChartRef, categoryChartRef, customStartDate, customEndDate, carregarConferenciaView, ...confProps,
+           // ADMIN: spread das propriedades retornadas pelo modulo AdminJS
+           isAdmin, currentUserEmail, goToAdmin, userPermissions, ...adminProps
         };
       }
     }).mount('#app');
