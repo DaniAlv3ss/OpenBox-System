@@ -1,10 +1,14 @@
 /**
  * CONFERENCESERVICE.GS
  * Serviço dedicado para o módulo de Conferência e Qualidade.
+ * ATUALIZADO COM LOCK SERVICE (Evita colisão de dados)
  */
 
 // Busca dados separados por status
 function getConferenceData() {
+  // Permite acesso de leitura para conferentes
+  checkSecurityPermission('Qualquer');
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEETS.HIST_MONTAGEM);
   if (!sheet || sheet.getLastRow() <= 1) return { pending: [], completed: [] };
@@ -12,7 +16,6 @@ function getConferenceData() {
   const data = sheet.getDataRange().getDisplayValues();
   let headers = data[0];
   let statusIdx = headers.indexOf('Status Conferência');
-  // Se não existir, usa índice 11 (coluna L) como padrão ou cria virtualmente
   if (statusIdx === -1) statusIdx = 11; 
 
   const groups = {};
@@ -46,7 +49,6 @@ function getConferenceData() {
       descricao: row[5],
       categoria: row[6],
       endereco: row[8],
-      // Se o status for realizado, marca como checkado, senão falso
       checked: status === 'Conferência Realizada' 
     });
   }
@@ -64,51 +66,82 @@ function getConferenceData() {
   };
 }
 
-// Atualiza status e Salva Log com E-mail
+// Atualiza status e Salva Log com E-mail + LOCK SERVICE
 function markLoteAsChecked(loteId, pcName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // 1. Atualiza Status na Aba de Montagem
-  const sheetMontagem = ss.getSheetByName(SHEETS.HIST_MONTAGEM);
-  if (!sheetMontagem) throw new Error("Aba de Montagens não encontrada");
+  // SEGURANÇA: Apenas Conferente ou Admin pode validar
+  const userEmail = checkSecurityPermission('Conferente|Admin');
 
-  const data = sheetMontagem.getDataRange().getValues();
-  let headers = data[0];
-  let statusIdx = headers.indexOf('Status Conferência');
-  
-  if (statusIdx === -1) {
-      statusIdx = headers.length;
-      sheetMontagem.getRange(1, statusIdx + 1).setValue('Status Conferência');
+  // --- LOCK SERVICE START ---
+  // Impede que duas pessoas aprovem o mesmo lote ao mesmo tempo
+  const lock = LockService.getScriptLock();
+  try {
+      // Tenta adquirir o "cadeado" por 30 segundos
+      const success = lock.tryLock(30000);
+      if (!success) {
+          throw new Error('O sistema está ocupado processando outra conferência. Tente novamente em alguns segundos.');
+      }
+
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 1. Atualiza Status na Aba de Montagem
+      const sheetMontagem = ss.getSheetByName(SHEETS.HIST_MONTAGEM);
+      if (!sheetMontagem) throw new Error("Aba de Montagens não encontrada");
+
+      const data = sheetMontagem.getDataRange().getValues();
+      let headers = data[0];
+      let statusIdx = headers.indexOf('Status Conferência');
+      
+      if (statusIdx === -1) {
+          statusIdx = headers.length;
+          sheetMontagem.getRange(1, statusIdx + 1).setValue('Status Conferência');
+      }
+
+      let updated = false;
+
+      // Atualiza linhas correspondentes ao lote
+      for (let i = 1; i < data.length; i++) {
+        // Verifica Lote E se já não foi conferido (para evitar duplicidade de log)
+        if (String(data[i][0]) === loteId) {
+          const currentStatus = data[i][statusIdx];
+          if (currentStatus !== 'Conferência Realizada') {
+             sheetMontagem.getRange(i + 1, statusIdx + 1).setValue('Conferência Realizada');
+             updated = true;
+          }
+        }
+      }
+
+      if (updated) {
+          // 2. Salva Log na Aba de Logs do Sistema (Centralizado)
+          logSystemAction(userEmail, 'CONFERENCIA_REALIZADA', `Aprovou o Lote ${loteId} (PC: ${pcName || 'Completo'})`);
+
+          // Log Específico
+          const logSheetName = SHEETS.HIST_CONFERENCIA;
+          let sheetLog = ss.getSheetByName(logSheetName);
+          if (!sheetLog) {
+              sheetLog = ss.insertSheet(logSheetName);
+              const h = ['Data/Hora', 'ID Lote', 'PC Conferido', 'Conferido Por (Email)', 'Status'];
+              sheetLog.appendRow(h);
+              sheetLog.getRange(1, 1, 1, h.length).setFontWeight("bold").setBackground("#4F46E5").setFontColor("white");
+          }
+
+          sheetLog.appendRow([
+              new Date(),
+              loteId,
+              pcName || 'Lote Completo',
+              userEmail,
+              'APROVADO'
+          ]);
+          return `Conferência do Lote ${loteId} registrada com sucesso!`;
+      } else {
+          return `Lote ${loteId} já estava conferido. Nenhuma alteração feita.`;
+      }
+
+  } catch (e) {
+      Logger.log("Erro no Lock: " + e.message);
+      throw e; // Repassa o erro para o frontend
+  } finally {
+      // --- LOCK SERVICE RELEASE ---
+      // Solta o cadeado independente de erro ou sucesso
+      lock.releaseLock();
   }
-
-  // Atualiza linhas correspondentes ao lote
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === loteId) {
-      sheetMontagem.getRange(i + 1, statusIdx + 1).setValue('Conferência Realizada');
-    }
-  }
-
-  // 2. Salva Log na Aba de Histórico de Conferência
-  const userEmail = Session.getActiveUser().getEmail() || "Usuario Desconhecido";
-  const timestamp = new Date();
-  
-  // Garante que a aba de logs existe
-  const logSheetName = SHEETS.HIST_CONFERENCIA || 'Historico_Conferencias_Logs';
-  let sheetLog = ss.getSheetByName(logSheetName);
-  if (!sheetLog) {
-      sheetLog = ss.insertSheet(logSheetName);
-      const h = ['Data/Hora', 'ID Lote', 'PC Conferido', 'Conferido Por (Email)', 'Status'];
-      sheetLog.appendRow(h);
-      sheetLog.getRange(1, 1, 1, h.length).setFontWeight("bold").setBackground("#4F46E5").setFontColor("white");
-  }
-
-  sheetLog.appendRow([
-      timestamp,
-      loteId,
-      pcName || 'Lote Completo',
-      userEmail,
-      'APROVADO'
-  ]);
-  
-  return `Conferência do Lote ${loteId} registrada por ${userEmail}!`;
 }
