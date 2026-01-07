@@ -1,0 +1,158 @@
+<!-- VIEW ADMIN: Gerenciamento de Usuários e Permissões -->
+<div v-if="currentView === 'admin' && isAdmin" class="flex flex-1 overflow-hidden w-full bg-slate-900 animate-fade-in flex-col p-6 custom-scroll overflow-y-auto relative">
+   
+   <!-- Cabeçalho -->
+   <div class="flex justify-between items-center mb-8">
+       <div>
+           <h2 class="text-2xl font-black text-white flex items-center gap-3">
+               <span class="bg-red-600 w-10 h-10 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/50"><i class="fa-solid fa-user-shield"></i></span>
+               Painel Administrativo
+           </h2>
+           <p class="text-sm text-slate-400 mt-2">Gestão de acessos, funções e segurança granular.</p>
+       </div>
+       <button @click="fetchUsers" class="btn btn-sm btn-outline border-slate-700 text-slate-400 hover:text-white hover:border-slate-500">
+           <i class="fa-solid fa-sync mr-2"></i> Atualizar Lista
+       </button>
+   </div>
+
+   <!-- Cards de Resumo -->
+   <div class="grid grid-cols-3 gap-6 mb-8">
+       <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+           <div class="text-xs font-bold text-slate-500 uppercase">Usuários Ativos</div>
+           <div class="text-3xl font-black text-white mt-1">{{ adminUsers.filter(u => u.status === 'Ativo').length }}</div>
+       </div>
+       <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+           <div class="text-xs font-bold text-slate-500 uppercase">Administradores</div>
+           <div class="text-3xl font-black text-red-500 mt-1">{{ adminUsers.filter(u => (u.funcao || '').includes('Admin')).length }}</div>
+       </div>
+       <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+           <div class="text-xs font-bold text-slate-500 uppercase">Bloqueados</div>
+           <div class="text-3xl font-black text-slate-400 mt-1">{{ adminUsers.filter(u => u.status !== 'Ativo').length }}</div>
+       </div>
+   </div>
+
+   <div class="flex gap-6 items-start">
+       
+       <!-- Formulário de Usuário (EDITOR) -->
+       <div class="w-1/3 bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+           <h3 class="font-bold text-white mb-4 border-b border-slate-700 pb-2 flex justify-between items-center">
+               <span><i class="fa-solid" :class="editingUser ? 'fa-pen' : 'fa-plus'"></i> {{ editingUser ? 'Editar Acesso' : 'Novo Usuário' }}</span>
+               <button v-if="editingUser" @click="cancelEditUser" class="text-xs text-red-400 hover:text-red-300">Cancelar</button>
+           </h3>
+           
+           <div class="space-y-4">
+               <!-- Email -->
+               <div>
+                   <label class="label text-xs font-bold text-slate-400">E-mail Google</label>
+                   <input type="email" v-model="userForm.email" :disabled="editingUser" 
+                          class="input input-sm w-full bg-slate-900 border-slate-700 text-white focus:border-red-500 focus:outline-none placeholder-slate-600" 
+                          placeholder="usuario@empresa.com">
+               </div>
+               
+               <!-- Nome -->
+               <div>
+                   <label class="label text-xs font-bold text-slate-400">Nome Completo</label>
+                   <input type="text" v-model="userForm.nome" 
+                          class="input input-sm w-full bg-slate-900 border-slate-700 text-white focus:border-red-500 focus:outline-none placeholder-slate-600" 
+                          placeholder="Ex: João Silva">
+               </div>
+
+               <!-- Permissões (Checkboxes) -->
+               <div class="bg-slate-900/50 p-3 rounded border border-slate-700">
+                   <label class="label text-xs font-bold text-slate-400 mb-2 block uppercase tracking-wider">Permissões de Acesso</label>
+                   
+                   <div class="space-y-2">
+                       <label class="flex items-center gap-3 cursor-pointer group">
+                           <input type="checkbox" value="Admin" v-model="selectedRoles" class="checkbox checkbox-error checkbox-xs rounded-sm">
+                           <span class="text-sm font-bold text-red-400 group-hover:text-red-300">Admin Total</span>
+                       </label>
+                       <div class="h-px bg-slate-700 my-1"></div>
+                       <label class="flex items-center gap-3 cursor-pointer group">
+                           <input type="checkbox" value="Montador" v-model="selectedRoles" class="checkbox checkbox-warning checkbox-xs rounded-sm">
+                           <span class="text-sm text-slate-300 group-hover:text-white">Montador (Ver Montagem)</span>
+                       </label>
+                       <label class="flex items-center gap-3 cursor-pointer group">
+                           <input type="checkbox" value="Conferente" v-model="selectedRoles" class="checkbox checkbox-info checkbox-xs rounded-sm">
+                           <span class="text-sm text-slate-300 group-hover:text-white">Conferente (Aprovar QA)</span>
+                       </label>
+                       <label class="flex items-center gap-3 cursor-pointer group">
+                           <input type="checkbox" value="Logistica" v-model="selectedRoles" class="checkbox checkbox-primary checkbox-xs rounded-sm">
+                           <span class="text-sm text-slate-300 group-hover:text-white">Logística (Ver Remessa)</span>
+                       </label>
+                       <div class="h-px bg-slate-700 my-1"></div>
+                       <label class="flex items-center gap-3 cursor-pointer group">
+                           <input type="checkbox" value="EditHistory" v-model="selectedRoles" class="checkbox checkbox-accent checkbox-xs rounded-sm">
+                           <span class="text-sm text-emerald-400 group-hover:text-emerald-300 font-bold">Editar Histórico (Delete)</span>
+                       </label>
+                   </div>
+               </div>
+
+               <!-- Status -->
+               <div>
+                   <label class="label text-xs font-bold text-slate-400">Status da Conta</label>
+                   <select v-model="userForm.status" class="select select-sm w-full bg-slate-900 border-slate-700 text-white focus:border-red-500">
+                       <option value="Ativo">Ativo (Permitido)</option>
+                       <option value="Inativo">Bloqueado</option>
+                   </select>
+               </div>
+               
+               <!-- Botão Salvar -->
+               <div class="pt-4">
+                   <button @click="saveUser" :disabled="savingUser" class="btn btn-sm w-full bg-red-600 hover:bg-red-700 text-white border-none shadow-lg shadow-red-900/50">
+                       <span v-if="savingUser" class="loading loading-spinner loading-xs"></span>
+                       <span v-else><i class="fa-solid fa-save mr-2"></i> Salvar Alterações</span>
+                   </button>
+               </div>
+           </div>
+       </div>
+
+       <!-- Lista de Usuários (TABELA) -->
+       <div class="flex-1 bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden flex flex-col h-[600px]">
+           <div class="overflow-y-auto custom-scroll flex-1">
+               <table class="table table-sm w-full text-left relative">
+                   <thead class="bg-slate-900 text-slate-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
+                       <tr>
+                           <th class="pl-6 py-4 bg-slate-900">Usuário</th>
+                           <th class="bg-slate-900">Permissões</th>
+                           <th class="bg-slate-900">Status</th>
+                           <th class="text-right pr-6 bg-slate-900">Ações</th>
+                       </tr>
+                   </thead>
+                   <tbody class="text-sm">
+                       <tr v-if="adminUsers.length === 0">
+                           <td colspan="4" class="text-center py-8 text-slate-500 italic">Carregando ou nenhum usuário encontrado...</td>
+                       </tr>
+                       <tr v-for="u in adminUsers" :key="u.email" class="border-b border-slate-700 hover:bg-slate-700/50 transition-colors group">
+                           <td class="pl-6 py-3">
+                               <div class="font-bold text-white">{{ u.nome }}</div>
+                               <div class="text-xs text-slate-500 font-mono">{{ u.email }}</div>
+                           </td>
+                           <td>
+                               <div class="flex flex-wrap gap-1">
+                                   <!-- Renderização das Tags de Permissão -->
+                                   <span v-if="u.funcao.includes('Admin')" class="badge badge-xs badge-error font-bold text-white">ADMIN</span>
+                                   <span v-if="u.funcao.includes('Montador')" class="badge badge-xs badge-warning text-slate-900">Montador</span>
+                                   <span v-if="u.funcao.includes('Conferente')" class="badge badge-xs badge-info text-white">QA</span>
+                                   <span v-if="u.funcao.includes('Logistica')" class="badge badge-xs badge-primary text-white">Logística</span>
+                                   <span v-if="u.funcao.includes('EditHistory')" class="badge badge-xs badge-accent text-slate-900">Editor</span>
+                                   <span v-if="!u.funcao" class="text-slate-600 text-xs italic">Sem acesso</span>
+                               </div>
+                           </td>
+                           <td>
+                               <div class="flex items-center gap-2">
+                                   <div class="w-2 h-2 rounded-full" :class="u.status === 'Ativo' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-slate-500'"></div>
+                                   <span class="font-medium" :class="u.status === 'Ativo' ? 'text-green-400' : 'text-slate-500'">{{ u.status }}</span>
+                               </div>
+                           </td>
+                           <td class="text-right pr-6">
+                               <button @click="editUser(u)" class="btn btn-xs btn-square btn-ghost text-slate-400 hover:text-white hover:bg-slate-600" title="Editar">
+                                   <i class="fa-solid fa-pen"></i>
+                               </button>
+                           </td>
+                       </tr>
+                   </tbody>
+               </table>
+           </div>
+       </div>
+   </div>
+</div>
