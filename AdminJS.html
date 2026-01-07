@@ -1,0 +1,118 @@
+<script>
+/**
+ * Módulo de Lógica para Administração
+ * Exporta a função useAdmin para ser consumida pelo app principal
+ */
+function useAdmin(toasts, mockGoogleRun) {
+    const { ref, reactive, watch } = Vue;
+
+    // Estado Local
+    const adminUsers = ref([]);
+    const editingUser = ref(false);
+    const savingUser = ref(false);
+    const loadingList = ref(false); // Novo estado de carregamento
+    
+    // Formulário
+    const userForm = ref({ 
+        email: '', 
+        nome: '', 
+        funcao: '', // String vinda do backend
+        status: 'Ativo' 
+    });
+
+    // Array para controlar os checkboxes (v-model)
+    const selectedRoles = ref([]);
+
+    // --- Actions ---
+
+    const fetchUsers = () => {
+        loadingList.value = true;
+        const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+        
+        runner.withSuccessHandler(res => { 
+            loadingList.value = false;
+            // Garante que é array e força a atualização reativa
+            if (Array.isArray(res)) {
+                adminUsers.value = res;
+                if (res.length === 0) {
+                     // Não é erro, apenas lista vazia (raro se for admin)
+                     console.warn("Lista de usuários retornou vazia.");
+                }
+            } else {
+                adminUsers.value = [];
+            }
+        })
+        .withFailureHandler(e => {
+            loadingList.value = false;
+            adminUsers.value = []; // Limpa em caso de erro
+            toasts.value.push({ id: Date.now(), msg: "Erro ao listar usuários: " + e.message, type: 'error', title: 'Erro Admin' });
+        })
+        .getSystemUsers();
+    };
+
+    const saveUser = () => {
+        if(!userForm.value.email || !userForm.value.nome) {
+            toasts.value.push({ id: Date.now(), msg: "Preencha e-mail e nome.", type: 'error', title: 'Validação' });
+            return;
+        }
+
+        // Converte array de checkboxes para string separada por vírgula
+        // Ex: ['Montador', 'Logistica'] -> "Montador, Logistica"
+        userForm.value.funcao = selectedRoles.value.join(', ');
+
+        if (!userForm.value.funcao) {
+             toasts.value.push({ id: Date.now(), msg: "Selecione pelo menos uma permissão.", type: 'error', title: 'Validação' });
+             return;
+        }
+
+        savingUser.value = true;
+        
+        // Cria cópia limpa para envio
+        const payload = JSON.parse(JSON.stringify(userForm.value));
+
+        const runner = (typeof google !== 'undefined') ? google.script.run : mockGoogleRun();
+        runner.withSuccessHandler(r => {
+            toasts.value.push({ id: Date.now(), msg: r, type: 'success', title: 'Sucesso' });
+            savingUser.value = false;
+            cancelEditUser();
+            fetchUsers(); // Recarrega a lista
+        }).withFailureHandler(e => {
+            toasts.value.push({ id: Date.now(), msg: "Erro ao salvar: " + e.message, type: 'error', title: 'Erro' });
+            savingUser.value = false;
+        }).saveSystemUser(payload);
+    };
+
+    const editUser = (user) => {
+        // Clona dados do usuário para o form
+        userForm.value = { ...user };
+        
+        // Converte a string "Montador, Logistica" de volta para o array dos checkboxes
+        if (user.funcao) {
+            selectedRoles.value = user.funcao.split(',').map(r => r.trim());
+        } else {
+            selectedRoles.value = [];
+        }
+        
+        editingUser.value = true;
+    };
+
+    const cancelEditUser = () => {
+        userForm.value = { email: '', nome: '', funcao: '', status: 'Ativo' };
+        selectedRoles.value = []; // Limpa checkboxes
+        editingUser.value = false;
+    };
+
+    return {
+        adminUsers,
+        userForm,
+        editingUser,
+        savingUser,
+        loadingList, // Exportado para uso no template se necessário
+        selectedRoles,
+        fetchUsers,
+        saveUser,
+        editUser,
+        cancelEditUser
+    };
+}
+</script>
