@@ -5,27 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema OpenBox Enterprise</title>
   
-  <!-- Dependências Externas -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
-  
-  <!-- Chart.js para Gráficos Sofisticados -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Inclusão do CSS -->
-  <?!= include('Styles'); ?>
   
-  <!-- MÓDULOS JAVASCRIPT (Lógica separada) -->
+  <!-- PROTEÇÃO VISUAL CONTRA FLICKER -->
+  <style>
+    [v-cloak] { display: none !important; }
+  </style>
+
+  <?!= include('Styles'); ?>
   <?!= include('ConferenceJS'); ?>
   <?!= include('AdminJS'); ?>
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
 
-  <div id="app" class="h-full flex flex-row relative" :class="printModeClass">
+  <!-- v-cloak adicionado aqui para esconder o app até o Vue montar -->
+  <div id="app" class="h-full flex flex-col relative" :class="printModeClass" v-cloak>
     
-    <!-- TOAST NOTIFICATIONS -->
+    <!-- TOAST NOTIFICATIONS (Sempre visível) -->
     <div class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
       <transition-group name="toast">
         <div v-for="t in toasts" :key="t.id" class="pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl border-l-4 min-w-[300px] bg-white animate-in slide-in-from-right"
@@ -41,660 +41,605 @@
       </transition-group>
     </div>
 
-    <!-- LOADING / ERROR OVERLAY -->
-    <div v-if="loading || errorMsg" class="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center no-print">
-      <div v-if="loading" class="flex flex-col items-center">
-        <span class="loading loading-infinity loading-lg text-kabum scale-150 mb-4"></span>
-        <h2 class="text-2xl font-bold text-slate-800 tracking-tight">A Sincronizar Sistema...</h2>
-        <p class="text-slate-500 mt-2">Verificando permissões e estoque em tempo real</p>
-      </div>
-      <div v-else class="max-w-md bg-white p-8 rounded-2xl shadow-2xl border border-red-100">
-        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <i class="fa-solid fa-user-lock text-2xl text-red-500"></i>
-        </div>
-        <h3 class="text-xl font-bold text-slate-800 mb-2">Acesso Negado ou Erro</h3>
-        <p class="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded border border-slate-200 font-mono">{{ errorMsg }}</p>
-        <button @click="window.location.reload()" class="btn btn-kabum w-full text-white shadow-lg shadow-orange-200">Recarregar</button>
-      </div>
-    </div>
-
-    <!-- SIDEBAR MENU -->
-    <aside class="w-20 bg-slate-900 flex flex-col items-center py-6 gap-6 shrink-0 z-40 no-print shadow-2xl">
-      <div class="w-10 h-10 bg-kabum rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/20 mb-2 hover:scale-110 transition-transform cursor-pointer" title="OpenBox OS">
-         <i class="fa-solid fa-microchip text-white text-lg"></i>
-      </div>
-
-      <nav class="flex flex-col gap-4 w-full px-2">
-         <!-- MENU DE MONTAGEM -->
-         <button @click="currentView = 'montagem'" v-if="userPermissions.canViewMontagem || isAdmin"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'montagem' ? 'bg-slate-800 text-kabum shadow-lg shadow-orange-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
-                 title="Montagem">
-            <i class="fa-solid fa-screwdriver-wrench text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Montar</span>
-            <div v-if="currentView === 'montagem'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabum rounded-r-full"></div>
-         </button>
-
-         <!-- MENU CONFERÊNCIA -->
-         <button @click="carregarConferenciaView" v-if="userPermissions.canViewConferencia || isAdmin"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'conferencia' ? 'bg-slate-800 text-indigo-500 shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
-                 title="Conferência">
-            <i class="fa-solid fa-clipboard-check text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Conf.</span>
-            <div v-if="currentView === 'conferencia'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-500 rounded-r-full"></div>
-         </button>
-
-         <!-- MENU REMESSA -->
-         <button @click="currentView = 'remessa'" v-if="userPermissions.canViewRemessa || isAdmin"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'remessa' ? 'bg-slate-800 text-kabumBlue shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
-                 title="Remessa">
-            <i class="fa-solid fa-truck-ramp-box text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Remessa</span>
-            <div v-if="currentView === 'remessa'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabumBlue rounded-r-full"></div>
-         </button>
-
-         <!-- MENU HISTÓRICO -->
-         <button @click="carregarHistoricoView" v-if="userPermissions.canViewHistorico || isAdmin"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'historico' ? 'bg-slate-800 text-emerald-500 shadow-lg shadow-emerald-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
-                 title="Histórico">
-            <i class="fa-solid fa-clock-rotate-left text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Histórico</span>
-            <div v-if="currentView === 'historico'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 rounded-r-full"></div>
-         </button>
-
-         <!-- MENU DASHBOARD -->
-         <button @click="goToDashboard"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'dashboard' ? 'bg-slate-800 text-purple-500 shadow-lg shadow-purple-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
-                 title="Dashboard">
-            <i class="fa-solid fa-chart-pie text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Dash</span>
-            <div v-if="currentView === 'dashboard'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-purple-500 rounded-r-full"></div>
-         </button>
-
-         <!-- MENU ADMIN (SÓ APARECE SE FOR ADMIN) -->
-         <div v-if="isAdmin" class="w-full h-px bg-slate-800 my-1"></div>
-         <button v-if="isAdmin"
-                 @click="goToAdmin"
-                 class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
-                 :class="currentView === 'admin' ? 'bg-red-900/30 text-red-500 shadow-lg shadow-red-900/10 border border-red-900/50' : 'text-red-400/60 hover:text-red-400 hover:bg-red-900/20'"
-                 title="Painel Admin">
-            <i class="fa-solid fa-shield-halved text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
-            <span class="text-[9px] font-bold uppercase tracking-wider">Admin</span>
-            <div v-if="currentView === 'admin'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-red-500 rounded-r-full"></div>
-         </button>
-
-      </nav>
-
-      <div class="mt-auto flex flex-col gap-4 w-full px-2">
-         <button class="flex flex-col items-center gap-1 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all" @click="carregarEstoque" title="Atualizar Estoque">
-             <i class="fa-solid fa-rotate" :class="{'animate-spin': loading}"></i>
-         </button>
-      </div>
-    </aside>
-
-    <!-- MAIN CONTENT -->
-    <div class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
-      
-       <!-- HEADER -->
-       <header class="h-16 bg-white border-b border-slate-200 flex items-center px-6 justify-between shrink-0 z-30 shadow-sm no-print">
-         <div>
-           <h1 class="font-bold text-xl text-slate-800 leading-none tracking-tight">OPENBOX <span class="text-kabum">PRO</span></h1>
-           <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">
-              <span v-if="currentView === 'montagem'">Módulo de Configuração</span>
-              <span v-else-if="currentView === 'conferencia'">Conferência de Qualidade</span>
-              <span v-else-if="currentView === 'remessa'">Controlo de Logística</span>
-              <span v-else-if="currentView === 'historico'">Histórico de Operações</span>
-              <span v-else-if="currentView === 'admin'" class="text-red-500"><i class="fa-solid fa-lock mr-1"></i> Acesso Administrativo</span>
-              <span v-else>Dashboard Analítico</span>
-           </span>
-         </div>
-         <div class="flex items-center gap-6">
-            <div class="flex flex-col items-end">
-               <span class="text-[10px] uppercase font-bold text-slate-400">Inventário Ativo</span>
-               <span class="font-bold text-slate-700 text-lg leading-none">{{ estoqueDisponivel.length }}</span>
-            </div>
-            <div class="h-8 w-px bg-slate-200"></div>
-            <div class="flex flex-col items-end">
-               <span class="text-[10px] uppercase font-bold text-slate-400">SKUs Únicos</span>
-               <span class="font-bold text-kabum text-lg leading-none">{{ listaAgrupadaMontagem.length }}</span>
-            </div>
-         </div>
-       </header>
-
-      <div class="flex flex-1 overflow-hidden no-print relative">
-        
-        <!-- VIEW 1: MONTAGEM -->
-        <div v-if="currentView === 'montagem'" class="flex flex-1 overflow-hidden w-full animate-fade-in">
-           <!-- CATÁLOGO -->
-           <main class="flex-1 flex flex-col min-w-0">
-             <div class="p-3 bg-white border-b border-slate-200 flex gap-3 items-center shadow-sm z-20">
-               <div class="relative flex-1 group">
-                 <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-kabum transition-colors text-sm"></i>
-                 <input type="text" v-model="search" placeholder="Pesquisar componentes..." 
-                        class="input input-sm w-full pl-9 bg-slate-50 border-slate-200 focus:bg-white focus:border-kabum focus:outline-none transition-all rounded-lg shadow-inner text-xs">
-               </div>
-               <select v-model="filterSec" class="select select-bordered select-sm border-slate-200 bg-slate-50 focus:bg-white focus:border-kabum rounded-lg w-56 shadow-sm font-medium text-slate-600 text-xs">
-                 <option value="">Todas as Categorias</option>
-                 <option v-for="cat in categorias" :value="cat">{{ cat }}</option>
-               </select>
-             </div>
-  
-             <div class="flex-1 overflow-y-auto p-4 custom-scroll">
-               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-10">
-                 <div v-for="grupo in listaPaginadaMontagem" :key="grupo.codigo" 
-                      @click="adicionarAoPC(grupo)"
-                      class="card-shadow bg-white rounded-xl border border-slate-200 cursor-pointer flex flex-col h-[160px] relative overflow-hidden group select-none hover:border-kabum transition-all">
-                   <div class="px-3 pt-3 flex justify-between items-start z-10">
-                     <span class="text-[9px] font-bold uppercase tracking-wider py-0.5 px-1.5 rounded" :class="getCategoryStyle(grupo.categoria)">{{ grupo.categoria }}</span>
-                     <span class="text-[10px] font-bold text-white bg-green-500 px-1.5 py-0.5 rounded-full shadow-sm">{{ grupo.quantidade }}</span>
-                   </div>
-                   <div class="px-3 mt-2 flex-1 flex flex-col z-10">
-                     <h3 class="text-xs font-bold text-slate-800 leading-snug line-clamp-3 group-hover:text-kabumBlue transition-colors mb-1">{{ grupo.descricao }}</h3>
-                     <div v-if="grupo.sub" class="mt-auto mb-1">
-                       <span class="inline-block text-[9px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{{ grupo.sub }}</span>
-                     </div>
-                   </div>
-                   <div class="px-3 py-2 mt-auto border-t border-slate-100 bg-slate-50 flex justify-between items-end group-hover:bg-blue-50/30 transition-colors z-10">
-                      <div class="flex flex-col"><span class="text-[8px] font-bold text-slate-400 uppercase">Cód. {{ grupo.codigo }}</span></div>
-                      <div class="font-black text-sm text-slate-800 group-hover:text-kabum leading-none">{{ formatMoney(grupo.custo) }}</div>
-                   </div>
-                   <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 z-20 pointer-events-none">
-                      <div class="bg-kabum text-white w-10 h-10 rounded-full flex items-center justify-center shadow-xl scale-0 group-hover:scale-100 transition-transform duration-200">
-                         <i class="fa-solid fa-plus text-lg"></i>
-                      </div>
-                   </div>
-                 </div>
-               </div>
-               <div v-if="listaAgrupadaMontagem.length > limit" class="py-6 flex justify-center">
-                 <button @click="limit += 50" class="btn btn-sm btn-outline border-slate-300 text-slate-500 text-xs">Carregar mais</button>
-               </div>
-             </div>
-           </main>
-  
-           <!-- SIDEBAR MONTAGEM -->
-           <aside class="w-[550px] bg-white border-l border-slate-200 shadow-xl z-20 flex flex-col">
-             <div class="flex flex-col h-[80%] border-b-4 border-slate-100 bg-white">
-                 <div class="p-4 bg-white border-b border-slate-100 shadow-sm flex flex-col gap-3 relative z-30">
-                    <div class="flex justify-between items-center">
-                       <h2 class="font-bold text-slate-800 flex items-center gap-2 text-sm"><i class="fa-solid fa-microchip text-kabum"></i> Configuração Atual</h2>
-                       <button @click="currentBuild = []" class="text-[10px] text-red-400 hover:text-red-600 font-bold uppercase bg-red-50 px-2 py-1 rounded transition-colors" v-if="currentBuild.length">Limpar Tudo</button>
-                    </div>
-                    <div class="join w-full">
-                       <input v-model="pcName" type="text" placeholder="Nome do PC (Ex: Gamer i7)" class="input input-sm join-item w-full bg-slate-50 focus:bg-white focus:border-kabum text-xs">
-                       <button @click="autoName" class="btn btn-sm join-item" title="Gerar Nome Automático"><i class="fa-solid fa-magic text-xs"></i></button>
-                    </div>
-                    <div v-if="warnings.length" class="text-[10px] bg-amber-50 text-amber-800 p-2 rounded border border-amber-100">
-                       <div class="font-bold mb-0.5"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Validação Técnica:</div>
-                       <ul class="list-disc list-inside opacity-90 pl-1 space-y-0.5"><li v-for="w in warnings">{{ w }}</li></ul>
-                    </div>
-                 </div>
-                 
-                 <div class="flex-1 bg-slate-50 relative flex flex-col overflow-hidden">
-                    <!-- HEX GRID -->
-                    <div class="h-[320px] shrink-0 relative flex items-center justify-center border-b border-slate-200 bg-white/50">
-                        <div class="hex-grid">
-                           <template v-for="(icon, slot) in requiredSlots" :key="slot">
-                               <div class="hex-wrapper" :style="getHexPosition(slot)">
-                                   <div v-if="hasPart(slot)" class="hex-shape hex-filled group" :class="getHexColor(slot)" @click.stop>
-                                       <i class="fa-solid text-2xl mb-1" :class="icon"></i>
-                                       <span class="text-[8px] font-bold uppercase">{{ getSlotShortName(slot) }}</span>
-                                       <div class="hex-remove" @click.stop="removePartBySlot(slot)"><i class="fa-solid fa-times"></i></div>
-                                       <div class="hex-tooltip"><div class="font-bold truncate max-w-[120px]">{{ getPartName(slot) }}</div></div>
-                                   </div>
-                                   <div v-else @click="filterSec = slot" class="hex-shape hex-empty group">
-                                       <i class="fa-solid text-xl mb-1 opacity-40 group-hover:opacity-100 transition-all" :class="icon"></i>
-                                       <span class="text-[8px] font-bold uppercase opacity-60 group-hover:opacity-100">{{ getSlotShortName(slot) }}</span>
-                                   </div>
-                               </div>
-                           </template>
-                        </div>
-                    </div>
-
-                    <!-- LISTA DETALHADA -->
-                    <div class="flex-1 overflow-y-auto custom-scroll bg-slate-50 p-5 space-y-3">
-                        <div v-if="groupedBuild.length === 0" class="text-center text-xs text-slate-400 mt-4 italic">Nenhuma peça selecionada</div>
-                        <div v-for="item in groupedBuild" :key="item.etiqueta" class="bg-white border border-slate-200 rounded-lg shadow-sm flex items-center p-3 gap-3 transition-all hover:border-kabum">
-                             <div class="w-1.5 self-stretch rounded-full" :class="getColorBar(item.categoria)"></div>
-                             <div class="flex-1 min-w-0">
-                                 <div class="flex justify-between">
-                                     <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{{ item.categoria }}</span>
-                                     <span class="text-[10px] font-mono text-slate-500">{{ item.endereco }}</span>
-                                 </div>
-                                 <div class="text-xs font-bold text-slate-800 leading-tight line-clamp-1 mt-0.5" :title="item.descricao">{{ item.descricao }}</div>
-                                 <div class="text-[11px] font-bold text-slate-600 mt-1">{{ formatMoney(item.custo * item.qty) }}</div>
-                             </div>
-                             <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1.5">
-                                 <button @click="updateQty(item, -1)" class="w-7 h-7 flex items-center justify-center bg-white text-slate-500 rounded hover:text-red-500 hover:bg-red-50 shadow-sm transition-colors text-xs font-bold"><i class="fa-solid fa-minus"></i></button>
-                                 <span class="w-7 text-center text-sm font-bold text-slate-700">{{ item.qty }}</span>
-                                 <button @click="updateQty(item, 1)" class="w-7 h-7 flex items-center justify-center bg-white text-slate-500 rounded hover:text-green-500 hover:bg-green-50 shadow-sm transition-colors text-xs font-bold"><i class="fa-solid fa-plus"></i></button>
-                             </div>
-                        </div>
-                    </div>
-                 </div>
-
-                 <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-                    <div class="flex justify-between items-center mb-3">
-                       <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Custo Total</span>
-                       <span class="text-xl font-black text-kabumBlue">{{ formatMoney(buildTotal) }}</span>
-                    </div>
-                    <button @click="addToBatch" :disabled="!currentBuild.length" class="btn btn-sm w-full bg-kabum hover:bg-kabumDark text-white border-none shadow-lg shadow-orange-100">
-                       <i class="fa-solid fa-check mr-2"></i> Finalizar Configuração
-                    </button>
-                 </div>
-             </div>
-
-             <!-- LOTE SAIDA -->
-             <div class="flex flex-col flex-1 min-h-0 bg-slate-50 border-t-4 border-slate-200">
-                 <div class="p-3 bg-white border-b border-slate-200 flex justify-between items-center px-4 shadow-sm">
-                    <span class="text-xs font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2"><i class="fa-solid fa-boxes-stacked text-kabumBlue"></i> Lote Final</span>
-                    <span class="badge badge-neutral badge-sm">{{ batch.length }}</span>
-                 </div>
-                 <div class="flex-1 overflow-y-auto p-3 custom-scroll space-y-2">
-                    <div v-if="batch.length === 0" class="h-20 flex items-center justify-center text-slate-400 text-xs italic">Nenhum PC finalizado</div>
-                    <div v-for="(pc, idx) in batch" :key="idx" class="bg-white p-3 rounded-lg border border-slate-200 hover:border-kabumBlue transition-all shadow-sm group">
-                       <div class="flex justify-between items-start mb-2">
-                          <div class="flex flex-col min-w-0 pr-2">
-                             <span class="font-bold text-slate-800 text-sm truncate">{{ pc.nome }}</span>
-                             <span class="text-[10px] text-slate-500 font-medium mt-0.5">{{ pc.pecas.length }} itens &bull; {{ formatMoney(pc.total) }}</span>
-                          </div>
-                          <button @click="removeFromBatch(idx)" class="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
-                       </div>
-                    </div>
-                 </div>
-                 <div class="p-4 bg-white border-t border-slate-200 grid grid-cols-2 gap-3">
-                    <button @click="printBatch" :disabled="!batch.length" class="btn btn-sm btn-outline border-slate-300 text-slate-600"><i class="fa-solid fa-print mr-2"></i> PDF</button>
-                    <button @click="saveBatch" :disabled="!batch.length || saving" class="btn btn-sm btn-success text-white shadow-lg shadow-green-100"><span v-if="saving" class="loading loading-spinner loading-xs"></span><span v-else>Salvar Lote</span></button>
-                 </div>
-             </div>
-           </aside>
-        </div>
-  
-        <!-- VIEW 2: CONFERÊNCIA -->
-        <?!= include('Conference'); ?>
-
-        <!-- VIEW 3: REMESSA -->
-        <div v-if="currentView === 'remessa'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in">
-           <main class="flex-1 flex flex-col min-w-0 p-6 overflow-hidden">
-             <!-- DASHBOARD (CARDS) -->
-             <div class="mb-6 flex flex-col">
-                 <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-simple text-kabumBlue"></i> Estoque Open Box
-                 </h2>
-                 <div class="grid grid-cols-5 gap-3">
-                    <div v-for="(stat, cat) in estatisticasCategoria" :key="cat"
-                         @click="filterRemessaCat = (filterRemessaCat === cat ? '' : cat)"
-                         class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm cursor-pointer transition-all hover:shadow-md hover:-translate-y-1 relative overflow-hidden group h-24 flex flex-col justify-between"
-                         :class="filterRemessaCat === cat ? 'ring-2 ring-kabumBlue ring-offset-2' : ''">
-                       <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                          <i class="fa-solid fa-box text-3xl"></i>
-                       </div>
-                       <div>
-                          <div class="text-[9px] uppercase font-bold text-slate-400 mb-0.5 tracking-wider truncate w-11/12">{{ cat }}</div>
-                          <div class="text-2xl font-black text-slate-800 leading-none">{{ stat.count }}</div>
-                       </div>
-                       <div>
-                          <div class="text-[10px] text-slate-500 font-medium">{{ formatMoney(stat.totalValue) }}</div>
-                          <div class="h-1 w-full bg-slate-100 mt-1.5 rounded-full overflow-hidden">
-                             <div class="h-full bg-kabumBlue transition-all duration-500" :style="{ width: Math.min(100, (stat.count / 10) * 100) + '%' }"></div>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
-             </div>
-             <!-- LISTA -->
-             <div class="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                 <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-                    <div class="font-bold text-slate-700">
-                       <span v-if="filterRemessaCat">Filtrado por: <span class="text-kabumBlue">{{ filterRemessaCat }}</span></span>
-                       <span v-else>Catálogo Completo</span>
-                    </div>
-                    <div class="relative w-64">
-                       <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                       <input type="text" v-model="searchRemessa" placeholder="Código, Nome ou Tag..." class="input input-sm w-full pl-9 bg-white border-slate-300 rounded-lg focus:border-kabumBlue focus:outline-none">
-                    </div>
-                 </div>
-                 <div class="flex-1 overflow-y-auto custom-scroll">
-                    <table class="table table-sm w-full">
-                       <thead class="sticky top-0 bg-slate-100 z-10 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-                          <tr>
-                             <th class="w-12 text-center">Ação</th>
-                             <th>Código</th>
-                             <th>Etiqueta</th>
-                             <th>Descrição</th>
-                             <th>Local</th>
-                             <th class="text-right">Custo</th>
-                          </tr>
-                       </thead>
-                       <tbody>
-                          <tr v-for="item in listaFiltradaRemessa" :key="item.etiqueta" class="hover:bg-blue-50/50 transition-colors group">
-                             <td class="text-center">
-                                <button @click="addToRemessa(item)" class="btn btn-xs btn-square btn-outline border-slate-200 text-slate-400 hover:bg-kabumBlue hover:text-white hover:border-kabumBlue transition-all">
-                                   <i class="fa-solid fa-plus"></i>
-                                </button>
-                             </td>
-                             <td class="font-mono text-xs text-slate-500">{{ item.codigo }}</td>
-                             <td><span class="badge badge-sm badge-ghost font-mono text-[10px]">{{ item.etiqueta }}</span></td>
-                             <td>
-                                <div class="font-bold text-xs text-slate-700 group-hover:text-kabumBlue transition-colors">{{ item.descricao }}</div>
-                                <div class="text-[10px] text-slate-400">{{ item.categoria }} <span v-if="item.sub">&bull; {{ item.sub }}</span></div>
-                             </td>
-                             <td><span class="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ item.endereco }}</span></td>
-                             <td class="text-right font-mono text-xs font-bold text-slate-700">{{ formatMoney(item.custo) }}</td>
-                          </tr>
-                       </tbody>
-                    </table>
-                    <div v-if="listaFiltradaRemessa.length > limitRemessa" class="p-4 text-center border-t border-slate-100">
-                       <button @click="limitRemessa += 100" class="btn btn-xs btn-ghost text-kabumBlue">Carregar mais...</button>
-                    </div>
-                 </div>
-             </div>
-           </main>
-           <!-- SIDEBAR REMESSA -->
-           <aside class="w-[350px] bg-white border-l border-slate-200 shadow-xl z-20 flex flex-col">
-              <div class="p-5 bg-gradient-to-r from-kabumBlue to-kabumBlueDark text-white shadow-md">
-                 <h2 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-truck-moving"></i> Nova Remessa</h2>
-                 <p class="text-xs text-blue-200 mt-1">Gestão de Transferência</p>
-              </div>
-              <div class="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
-                 <div>
-                    <label class="label text-xs font-bold text-slate-500 pb-1 uppercase tracking-wider">ID Remessa (Seq)</label>
-                    <div class="relative">
-                       <i class="fa-solid fa-hashtag absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                       <input v-model="remessaNum" type="number" min="1" class="input input-sm w-full pl-9 border-slate-300 focus:border-kabumBlue focus:outline-none font-bold text-slate-700">
-                    </div>
-                 </div>
-                 <div>
-                    <label class="label text-xs font-bold text-slate-500 pb-1 uppercase tracking-wider">Destino</label>
-                    <div class="relative">
-                       <i class="fa-solid fa-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                       <input v-model="remessaDestino" type="text" placeholder="Ex: RMA, Loja Física..." class="input input-sm w-full pl-9 border-slate-300 focus:border-kabumBlue focus:outline-none">
-                    </div>
-                 </div>
-              </div>
-              <div class="flex-1 overflow-y-auto p-3 custom-scroll space-y-2 bg-slate-50">
-                 <div v-if="remessaCart.length === 0" class="h-40 flex flex-col items-center justify-center text-slate-400 opacity-60">
-                    <i class="fa-solid fa-dolly text-4xl mb-2"></i>
-                    <span class="text-xs font-bold">Aguardando itens...</span>
-                 </div>
-                 <transition-group name="list">
-                    <div v-for="(item, idx) in remessaCart" :key="item.etiqueta" class="bg-white p-2.5 rounded-lg border border-slate-200 flex gap-3 items-center shadow-sm hover:border-kabumBlue group transition-all">
-                       <div class="w-1 h-8 rounded-full bg-slate-300 group-hover:bg-kabumBlue transition-colors"></div>
-                       <div class="flex-1 min-w-0">
-                          <div class="text-xs font-bold text-slate-800 truncate">{{ item.descricao }}</div>
-                          <div class="flex justify-between mt-1 items-center">
-                             <span class="text-[10px] font-mono bg-slate-100 px-1.5 rounded text-slate-500 border border-slate-200">{{ item.etiqueta }}</span>
-                             <span class="text-[10px] font-bold text-slate-600">{{ formatMoney(item.custo) }}</span>
-                          </div>
-                       </div>
-                       <button @click="remessaCart.splice(idx, 1)" class="btn btn-xs btn-ghost text-red-300 hover:text-red-500 btn-square"><i class="fa-solid fa-times"></i></button>
-                    </div>
-                 </transition-group>
-              </div>
-              <div class="p-5 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-                 <div class="flex justify-between items-center mb-2 text-sm">
-                    <span class="text-slate-500 font-medium">Itens</span>
-                    <span class="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-full">{{ remessaCart.length }}</span>
-                 </div>
-                 <div class="flex justify-between items-center mb-5 text-sm">
-                    <span class="text-slate-500 font-medium">Valor Total</span>
-                    <span class="font-black text-xl text-kabumBlue">{{ formatMoney(remessaTotal) }}</span>
-                 </div>
-                 <div class="grid grid-cols-2 gap-3 mb-2">
-                    <button @click="printRemessa" :disabled="!remessaCart.length" class="btn btn-sm btn-outline border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-kabumBlue"><i class="fa-solid fa-print mr-2"></i> PDF</button>
-                    <button @click="saveRemessa" :disabled="!remessaCart.length || saving" class="btn btn-sm bg-kabumBlue hover:bg-kabumBlueDark text-white border-none shadow-lg shadow-blue-200">
-                       <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-                       <span v-else>Salvar</span>
-                    </button>
-                 </div>
-                 <button @click="exportToCSV" :disabled="!remessaCart.length" class="btn btn-xs w-full btn-ghost text-slate-400 font-normal"><i class="fa-solid fa-file-csv mr-1"></i> Exportar para Excel</button>
-              </div>
-           </aside>
-        </div>
-  
-        <!-- VIEW 4: HISTÓRICO -->
-        <div v-if="currentView === 'historico'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in flex-col p-6">
-            <div class="flex justify-between items-end mb-6">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fa-solid fa-clock-rotate-left text-emerald-500"></i> Histórico de Operações
-                    </h2>
-                    <p class="text-sm text-slate-400 mt-1">Gerencie lotes passados, exclua registros ou exporte dados.</p>
-                </div>
-                <div class="flex bg-white rounded-lg p-1 shadow-sm border border-slate-200 mr-4">
-                    <button @click="historicoTab = 'remessa'" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all" :class="historicoTab === 'remessa' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'">Remessas</button>
-                    <button @click="historicoTab = 'montagem'" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all" :class="historicoTab === 'montagem' ? 'bg-kabum text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'">Montagens</button>
-                </div>
-                <div class="relative w-64">
-                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" v-model="searchHistorico" placeholder="Buscar ID, Data..." class="input input-sm w-full pl-9 bg-white border-slate-300 rounded-lg focus:border-emerald-500 focus:outline-none">
-                </div>
-            </div>
-            <div class="flex-1 overflow-y-auto custom-scroll space-y-4 pb-10">
-                <div v-if="historicoList.length === 0" class="h-64 flex flex-col items-center justify-center text-slate-300">
-                    <i class="fa-solid fa-box-open text-5xl mb-3 opacity-50"></i>
-                    <span class="text-lg font-bold">Nenhum registro encontrado</span>
-                </div>
-                <div v-for="lote in historicoList" :key="lote.idLote" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group hover:border-emerald-400 transition-colors">
-                    <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center cursor-pointer select-none" @click="toggleDetails(lote.idLote)">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm" :class="lote.tipo === 'Montagem' ? 'bg-kabum' : 'bg-kabumBlue'"><i class="fa-solid" :class="lote.tipo === 'Montagem' ? 'fa-screwdriver-wrench' : 'fa-truck-ramp-box'"></i></div>
-                            <div>
-                                <div class="font-bold text-slate-800 text-lg">{{ lote.idLote }}</div>
-                                <div class="text-xs text-slate-500 font-medium flex gap-2"><span><i class="fa-regular fa-calendar mr-1"></i> {{ lote.dataHora }}</span><span class="text-slate-300">|</span><span>{{ lote.itens.length }} Itens</span><span v-if="lote.destino" class="text-kabumBlueDark font-bold ml-2"><i class="fa-solid fa-location-dot mr-1"></i> {{ lote.destino }}</span></div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <div class="text-right mr-4"><div class="text-[10px] uppercase font-bold text-slate-400">Valor Total</div><div class="font-black text-lg text-slate-700">{{ formatMoney(lote.total) }}</div></div>
-                            <div class="flex gap-2">
-                                <button @click.stop="exportHistoricoLote(lote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-emerald-600" title="Exportar CSV"><i class="fa-solid fa-file-csv text-lg"></i></button>
-                                <button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteLote(lote.idLote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-red-600 hover:bg-red-50" title="Excluir Lote Inteiro"><i class="fa-solid fa-trash-can text-lg"></i></button>
-                                <button class="btn btn-sm btn-ghost text-slate-400"><i class="fa-solid transition-transform duration-300" :class="expandedItems.includes(lote.idLote) ? 'fa-chevron-up' : 'fa-chevron-down'"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-if="expandedItems.includes(lote.idLote)" class="bg-white border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
-                        <table class="table table-sm w-full text-xs">
-                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase"><tr><th class="pl-6">Código</th><th>Etiqueta</th><th>Descrição</th><th>Local</th><th class="text-right">Custo</th><th class="text-center w-10">Ação</th></tr></thead>
-                            <tbody><tr v-for="item in lote.itens" :key="item.etiqueta + item.codigo" class="hover:bg-slate-50 border-b border-slate-100 last:border-0"><td class="pl-6 font-mono text-slate-500">{{ item.codigo }}</td><td><span class="badge badge-xs badge-ghost">{{ item.etiqueta }}</span></td><td class="font-medium text-slate-700">{{ item.descricao }}</td><td class="font-mono text-slate-500">{{ item.endereco }}</td><td class="text-right font-bold">{{ formatMoney(item.custo) }}</td><td class="text-center"><button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteItemHistorico(lote.idLote, item)" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Remover Item"><i class="fa-solid fa-times"></i></button></td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 5: DASHBOARD ANALÍTICO -->
-        <div v-if="currentView === 'dashboard'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in flex-col p-6 custom-scroll overflow-y-auto">
-            <!-- Header do Dashboard -->
-            <div class="flex justify-between items-center mb-6">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-pie text-purple-600"></i> Dashboard Analítico
-                    </h2>
-                    <p class="text-sm text-slate-400 mt-1">Visão geral de desempenho e movimentações.</p>
-                </div>
-                <div class="flex gap-3 items-center">
-                    <select v-model="dashboardType" class="select select-sm border-slate-200 shadow-sm text-slate-600 font-bold focus:border-purple-500 bg-white">
-                        <option value="Montagem">Montagens</option>
-                        <option value="Remessa">Remessas</option>
-                    </select>
-                    <select v-model="dashboardRange" class="select select-sm border-slate-200 shadow-sm text-slate-600 font-bold focus:border-purple-500 bg-white">
-                        <option :value="30">Últimos 30 Dias</option>
-                        <option :value="90">Últimos 3 Meses</option>
-                        <option :value="365">Este Ano</option>
-                        <option :value="9999">Todo o Período</option>
-                        <option value="custom">Personalizado</option>
-                    </select>
-                    <!-- Campos de Data Personalizada -->
-                    <div v-if="dashboardRange === 'custom'" class="flex gap-2 animate-in fade-in items-center bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                        <input type="date" v-model="customStartDate" class="input input-sm border-0 focus:outline-none text-xs text-slate-600 bg-transparent">
-                        <span class="text-slate-400 text-[10px] font-bold uppercase">ATÉ</span>
-                        <input type="date" v-model="customEndDate" class="input input-sm border-0 focus:outline-none text-xs text-slate-600 bg-transparent">
-                    </div>
-                </div>
-            </div>
-
-            <!-- KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <!-- Card 1: Valor Total -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-purple-200 transition-colors">
-                    <div class="absolute -right-6 -top-6 w-24 h-24 bg-purple-50 rounded-full group-hover:scale-110 transition-transform"></div>
-                    <div class="relative z-10">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Valor Movimentado</div>
-                        <div class="text-3xl font-black text-slate-800">{{ formatMoney(dashboardKpis.totalValue) }}</div>
-                        <div class="mt-2 text-xs font-medium text-emerald-500 flex items-center gap-1">
-                            <i class="fa-solid fa-sack-dollar"></i> Total Bruto
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 2: Quantidade -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
-                    <div class="absolute -right-6 -top-6 w-24 h-24 bg-blue-50 rounded-full group-hover:scale-110 transition-transform"></div>
-                    <div class="relative z-10">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                            {{ dashboardType === 'Montagem' ? 'Computadores Montados' : 'Lotes Enviados' }}
-                        </div>
-                        <div class="text-3xl font-black text-slate-800">{{ dashboardKpis.count }}</div>
-                        <div class="mt-2 text-xs font-medium text-blue-500 flex items-center gap-1">
-                            <i class="fa-solid fa-layer-group"></i> Volume Total
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 3: Ticket Médio -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-orange-200 transition-colors">
-                    <div class="absolute -right-6 -top-6 w-24 h-24 bg-orange-50 rounded-full group-hover:scale-110 transition-transform"></div>
-                    <div class="relative z-10">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ticket Médio</div>
-                        <div class="text-3xl font-black text-slate-800">{{ formatMoney(dashboardKpis.avgTicket) }}</div>
-                        <div class="mt-2 text-xs font-medium text-orange-500 flex items-center gap-1">
-                            <i class="fa-solid fa-tags"></i> Por {{ dashboardType === 'Montagem' ? 'Máquina' : 'Remessa' }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Gráficos e Tabelas -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-8">
-                <!-- Gráfico Diário (Chart.js) -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
-                    <h3 class="font-bold text-slate-700 mb-2 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-column text-purple-500"></i> Volume Diário
-                    </h3>
-                    <div class="flex-1 w-full h-full relative">
-                        <canvas ref="dailyChartRef"></canvas>
-                    </div>
-                </div>
-
-                <!-- Detalhamento por Categoria (Chart.js) -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
-                    <h3 class="font-bold text-slate-700 mb-2 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-bar text-blue-500"></i> Peças por Categoria
-                    </h3>
-                    <div class="flex-1 w-full h-full relative">
-                        <canvas ref="categoryChartRef"></canvas>
-                    </div>
+    <!-- MODAL DE LOGIN (Aparece se showLoginModal for true) -->
+    <div v-if="showLoginModal" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col">
+            <!-- Header Decorativo -->
+            <div class="h-32 bg-gradient-to-br from-kabum to-orange-700 flex items-center justify-center relative">
+                <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30"></div>
+                <div class="bg-white p-3 rounded-xl shadow-lg relative z-10 transform translate-y-8">
+                     <i class="fa-solid fa-shield-halved text-4xl text-kabum"></i>
                 </div>
             </div>
             
-            <!-- Resumo Mensal (Tabela Simples) -->
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-calendar-days text-orange-500"></i> Resumo Mensal
-                </h3>
-                <div class="overflow-x-auto">
-                    <table class="table table-sm w-full">
-                        <thead>
-                            <tr class="border-b border-slate-100 text-slate-400 text-[10px] uppercase">
-                                <th class="text-left">Mês/Ano</th>
-                                <th class="text-center">Quantidade</th>
-                                <th class="text-right">Valor Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="m in dashboardMonthlyStats" :key="m.label" class="hover:bg-slate-50">
-                                <td class="font-bold text-slate-700">{{ m.label }}</td>
-                                <td class="text-center font-mono text-slate-600">{{ m.count }}</td>
-                                <td class="text-right font-bold text-emerald-600">{{ formatMoney(m.value) }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div class="pt-12 pb-8 px-8">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-black text-slate-800 uppercase tracking-tight">Acesso OpenBox</h2>
+                    <p class="text-sm text-slate-500 font-medium">Identifique-se para continuar</p>
+                </div>
+                
+                <form @submit.prevent="manualLogin">
+                    <div class="space-y-4">
+                        <div class="form-control">
+                            <label class="label text-xs font-bold text-slate-700 uppercase">E-mail Cadastrado</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input type="email" v-model="authCreds.email" class="input input-bordered w-full pl-10 bg-slate-50 focus:bg-white focus:border-kabum" placeholder="seu.email@exemplo.com" required>
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label text-xs font-bold text-slate-700 uppercase">Senha de Acesso</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-key absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input type="password" v-model="authCreds.senha" class="input input-bordered w-full pl-10 bg-slate-50 focus:bg-white focus:border-kabum" placeholder="••••••••" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn bg-kabum hover:bg-kabumDark text-white w-full border-none shadow-lg shadow-orange-200 mt-2 h-12 text-base">
+                            <i class="fa-solid fa-right-to-bracket mr-2"></i> Entrar no Sistema
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="mt-6 text-center border-t border-slate-100 pt-4">
+                    <p class="text-xs text-slate-400 flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-google"></i> Login automático para contas corporativas
+                    </p>
                 </div>
             </div>
         </div>
-
-        <!-- VIEW ADMIN (MODULARIZADO) -->
-        <?!= include('Admin'); ?>
-
-      </div>
     </div>
 
-    <!-- PRINT LAYOUTS (INCLUÍDOS NO FINAL PARA NÃO AFETAR O FLOW) -->
+    <!-- LOADING OVERLAY (Se logado, mas carregando dados) -->
+    <div v-if="loading && isLogged" class="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center no-print">
+      <div class="flex flex-col items-center">
+        <span class="loading loading-infinity loading-lg text-kabum scale-150 mb-4"></span>
+        <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Sincronizando...</h2>
+      </div>
+    </div>
     
-    <!-- PRINT: MONTAGEM -->
-    <div class="print-only print-montagem max-w-[210mm] mx-auto bg-white text-black p-6 font-sans">
-      <div class="flex justify-between items-center border-b-4 border-kabum pb-4 mb-6">
-         <div class="flex items-center gap-4">
-            <div class="bg-kabum text-white p-3 rounded-lg"><i class="fa-solid fa-screwdriver-wrench text-3xl"></i></div>
-            <div><h1 class="text-3xl font-black text-kabumBlue uppercase tracking-tighter leading-none">OpenBox</h1><div class="text-sm font-bold text-gray-500 uppercase tracking-widest">Ordem de Separação - Montagem</div></div>
-         </div>
-         <div class="text-right"><div class="text-4xl font-black text-gray-800 mb-1">LOTE #{{ new Date().getTime().toString().slice(-6) }}</div><div class="text-sm font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded inline-block">{{ new Date().toLocaleString() }}</div></div>
-      </div>
-
-      <div class="bg-orange-50 border border-orange-100 rounded-lg p-4 mb-6 grid grid-cols-3 gap-4">
-         <div><div class="text-[10px] uppercase font-bold text-orange-400 mb-1">Configurações</div><div class="text-2xl font-black text-kabum">{{ batch.length }} <span class="text-xs font-medium text-gray-500">PCs</span></div></div>
-         <div class="text-center border-l border-orange-200"><div class="text-[10px] uppercase font-bold text-orange-400 mb-1">Total Peças</div><div class="text-2xl font-black text-gray-800">{{ batch.reduce((a,b)=>a+b.pecas.length,0) }}</div></div>
-         <div class="text-right border-l border-orange-200 pl-4"><div class="text-[10px] uppercase font-bold text-orange-400 mb-1">Valor Global</div><div class="text-2xl font-black text-gray-800">{{ formatMoney(batchTotal) }}</div></div>
-      </div>
-
-      <div v-for="(pc, idx) in batch" :key="idx" class="mb-8 break-inside-avoid">
-         <div class="flex justify-between items-center bg-gray-50 p-2 border-l-4 border-kabumBlue mb-2 rounded-r-lg">
-            <h2 class="font-bold text-lg text-kabumBlueDark pl-2">PC #{{ idx + 1 }} &mdash; {{ pc.nome }}</h2>
-            <span class="text-sm font-mono font-bold text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">{{ formatMoney(pc.total) }}</span>
-         </div>
-         <table class="w-full text-xs">
-            <thead><tr class="text-gray-500 border-b border-gray-200"><th class="py-1 text-center w-16 font-bold whitespace-nowrap">LOCAL</th><th class="py-1 text-left w-24 font-bold">ETIQUETA</th><th class="py-1 text-left font-bold">PRODUTO</th><th class="py-1 text-center w-24 font-bold">CATEGORIA</th><th class="py-1 text-center w-10 font-bold">CHK</th></tr></thead>
-            <tbody>
-               <tr v-for="p in pc.pecas.sort((a,b) => (a.endereco||'').localeCompare(b.endereco||''))" class="border-b border-gray-100 hover:bg-gray-50">
-                  <td class="py-2 text-center font-bold font-mono text-sm text-gray-700 bg-gray-50 rounded whitespace-nowrap">{{ p.endereco }}</td>
-                  <td class="py-2 pl-2 font-mono text-gray-500">{{ p.etiqueta }}</td>
-                  <td class="py-2 font-medium text-gray-800">{{ p.descricao }}</td>
-                  <td class="py-2 text-center"><span class="text-[9px] font-bold uppercase text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ p.categoria }}</span></td>
-                  <td class="py-2 text-center"><div class="w-4 h-4 border border-gray-300 rounded mx-auto"></div></td>
-               </tr>
-            </tbody>
-         </table>
+    <!-- TELA DE ERRO (Se logado, mas erro fatal) -->
+    <div v-if="errorMsg && isLogged && !loading" class="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center no-print">
+      <div class="max-w-md bg-white p-8 rounded-2xl shadow-2xl border border-red-100">
+        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fa-solid fa-triangle-exclamation text-2xl text-red-500"></i>
+        </div>
+        <h3 class="text-xl font-bold text-slate-800 mb-2">Erro de Operação</h3>
+        <p class="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded border border-slate-200 font-mono">{{ errorMsg }}</p>
+        <button @click="window.location.reload()" class="btn btn-kabum w-full text-white">Recarregar</button>
       </div>
     </div>
 
-    <!-- PRINT: REMESSA -->
-    <div class="print-only print-remessa max-w-[210mm] mx-auto bg-white text-black p-6 font-sans">
-      <div class="flex justify-between items-center border-b-4 border-kabum pb-4 mb-6">
-         <div class="flex items-center gap-4">
-            <div class="bg-kabum text-white p-3 rounded-lg"><i class="fa-solid fa-microchip text-3xl"></i></div>
-            <div><h1 class="text-3xl font-black text-kabumBlue uppercase tracking-tighter leading-none">OpenBox</h1><div class="text-sm font-bold text-gray-500 uppercase tracking-widest">Guia de Remessa Interna</div></div>
-         </div>
-         <div class="text-right"><div class="text-4xl font-black text-gray-800 mb-1">REM #{{ String(remessaNum).padStart(4, '0') }}</div><div class="text-sm font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded inline-block">{{ new Date().toLocaleString() }}</div></div>
-      </div>
-      <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6 flex justify-between items-center">
-         <div><div class="text-[10px] uppercase font-bold text-blue-400 mb-1">Destino</div><div class="text-xl font-bold text-kabumBlueDark">{{ remessaDestino || 'NÃO INFORMADO' }}</div></div>
-         <div class="text-right"><div class="text-[10px] uppercase font-bold text-blue-400 mb-1">Valor Declarado</div><div class="text-xl font-black text-gray-800">{{ formatMoney(remessaTotal) }}</div></div>
-         <div class="text-right pl-8 border-l border-blue-200"><div class="text-[10px] uppercase font-bold text-blue-400 mb-1">Volumes</div><div class="text-xl font-black text-kabum">{{ remessaCart.length }}</div></div>
-      </div>
-      <table class="w-full text-xs mb-8">
-         <thead><tr class="text-kabumBlue border-b-2 border-kabumBlue"><th class="py-2 text-center w-16 font-bold whitespace-nowrap">LOCAL</th><th class="py-2 text-center w-10 font-bold">#</th><th class="py-2 text-left w-24 font-bold pl-2">CÓDIGO</th><th class="py-2 text-left font-bold">DESCRIÇÃO</th><th class="py-2 text-center w-24 font-bold">CAT</th><th class="py-2 text-center w-16 font-bold">CHK</th></tr></thead>
-         <tbody><tr v-for="(item, idx) in remessaCart.sort((a,b) => (a.endereco||'').localeCompare(b.endereco||''))" :key="idx" class="border-b border-gray-200"><td class="py-3 text-center font-bold font-mono text-sm text-gray-700 bg-gray-50 whitespace-nowrap">{{ item.endereco }}</td><td class="py-3 text-center text-gray-400 font-bold">{{ idx + 1 }}</td><td class="py-3 pl-2"><div class="font-mono font-bold text-gray-700">{{ item.codigo }}</div></td><td class="py-3 font-medium text-gray-800 text-sm">{{ item.descricao }}<div class="text-[9px] text-gray-400">{{ item.etiqueta }}</div></td><td class="py-3 text-center"><span class="text-[9px] font-bold uppercase text-kabum bg-orange-50 px-2 py-1 rounded-full border border-orange-100">{{ item.categoria }}</span></td><td class="py-3 text-center"><div class="w-4 h-4 border border-gray-300 rounded mx-auto"></div></td></tr></tbody>
-      </table>
-      <div class="flex justify-between mt-auto pt-12 text-xs text-gray-500"><div class="w-5/12"><div class="border-b border-gray-400 mb-2"></div><div class="flex justify-between"><span>Expedição</span><span>Data: ___/___/___</span></div></div><div class="w-5/12"><div class="border-b border-gray-400 mb-2"></div><div class="flex justify-between"><span>Recebimento</span><span>Data: ___/___/___</span></div></div></div>
+    <!-- MAIN APP CONTENT (BLINDAGEM VISUAL: Só existe se isLogged=true) -->
+    <div v-if="isLogged" class="flex flex-1 overflow-hidden h-full flex-row">
+
+        <!-- SIDEBAR MENU -->
+        <aside class="w-20 bg-slate-900 flex flex-col items-center py-6 gap-6 shrink-0 z-40 no-print shadow-2xl">
+          <div class="w-10 h-10 bg-kabum rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/20 mb-2 hover:scale-110 transition-transform cursor-pointer" title="OpenBox OS">
+             <i class="fa-solid fa-microchip text-white text-lg"></i>
+          </div>
+
+          <nav class="flex flex-col gap-4 w-full px-2">
+             <!-- MENU DE MONTAGEM -->
+             <button @click="currentView = 'montagem'" v-if="userPermissions.canViewMontagem || isAdmin"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'montagem' ? 'bg-slate-800 text-kabum shadow-lg shadow-orange-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
+                     title="Montagem">
+                <i class="fa-solid fa-screwdriver-wrench text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Montar</span>
+                <div v-if="currentView === 'montagem'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabum rounded-r-full"></div>
+             </button>
+
+             <!-- MENU CONFERÊNCIA -->
+             <button @click="carregarConferenciaView" v-if="userPermissions.canViewConferencia || isAdmin"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'conferencia' ? 'bg-slate-800 text-indigo-500 shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
+                     title="Conferência">
+                <i class="fa-solid fa-clipboard-check text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Conf.</span>
+                <div v-if="currentView === 'conferencia'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-500 rounded-r-full"></div>
+             </button>
+
+             <!-- MENU REMESSA -->
+             <button @click="currentView = 'remessa'" v-if="userPermissions.canViewRemessa || isAdmin"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'remessa' ? 'bg-slate-800 text-kabumBlue shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
+                     title="Remessa">
+                <i class="fa-solid fa-truck-ramp-box text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Remessa</span>
+                <div v-if="currentView === 'remessa'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-kabumBlue rounded-r-full"></div>
+             </button>
+
+             <!-- MENU HISTÓRICO -->
+             <button @click="carregarHistoricoView" v-if="userPermissions.canViewHistorico || isAdmin"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'historico' ? 'bg-slate-800 text-emerald-500 shadow-lg shadow-emerald-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
+                     title="Histórico">
+                <i class="fa-solid fa-clock-rotate-left text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Histórico</span>
+                <div v-if="currentView === 'historico'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 rounded-r-full"></div>
+             </button>
+
+             <!-- MENU DASHBOARD -->
+             <button @click="goToDashboard"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'dashboard' ? 'bg-slate-800 text-purple-500 shadow-lg shadow-purple-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'"
+                     title="Dashboard">
+                <i class="fa-solid fa-chart-pie text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Dash</span>
+                <div v-if="currentView === 'dashboard'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-purple-500 rounded-r-full"></div>
+             </button>
+
+             <!-- MENU ADMIN -->
+             <div v-if="isAdmin" class="w-full h-px bg-slate-800 my-1"></div>
+             <button v-if="isAdmin"
+                     @click="currentView = 'admin'"
+                     class="flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-full group relative duration-300"
+                     :class="currentView === 'admin' ? 'bg-red-900/30 text-red-500 shadow-lg shadow-red-900/10 border border-red-900/50' : 'text-red-400/60 hover:text-red-400 hover:bg-red-900/20'"
+                     title="Painel Admin">
+                <i class="fa-solid fa-shield-halved text-xl mb-1 group-hover:-translate-y-1 transition-transform"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider">Admin</span>
+                <div v-if="currentView === 'admin'" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-red-500 rounded-r-full"></div>
+             </button>
+
+          </nav>
+
+          <div class="mt-auto flex flex-col gap-4 w-full px-2">
+             <button class="flex flex-col items-center gap-1 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all" @click="carregarEstoque" title="Atualizar Estoque">
+                 <i class="fa-solid fa-rotate" :class="{'animate-spin': loading}"></i>
+             </button>
+             <!-- Logout Manual para testar -->
+             <button class="flex flex-col items-center gap-1 p-2 rounded-xl text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-all" @click="localStorage.removeItem('openbox_pass'); location.reload();" title="Sair">
+                 <i class="fa-solid fa-power-off"></i>
+             </button>
+          </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
+          
+           <!-- HEADER -->
+           <header class="h-16 bg-white border-b border-slate-200 flex items-center px-6 justify-between shrink-0 z-30 shadow-sm no-print">
+             <div>
+               <h1 class="font-bold text-xl text-slate-800 leading-none tracking-tight">OPENBOX <span class="text-kabum">PRO</span></h1>
+               <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">
+                  <span v-if="currentView === 'montagem'">Módulo de Configuração</span>
+                  <span v-else-if="currentView === 'conferencia'">Conferência de Qualidade</span>
+                  <span v-else-if="currentView === 'remessa'">Controlo de Logística</span>
+                  <span v-else-if="currentView === 'historico'">Histórico de Operações</span>
+                  <span v-else-if="currentView === 'admin'" class="text-red-500"><i class="fa-solid fa-lock mr-1"></i> Acesso Administrativo</span>
+                  <span v-else>Dashboard Analítico</span>
+               </span>
+             </div>
+             <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2 mr-4 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-xs font-bold text-slate-600 truncate max-w-[150px]">{{ currentUserEmail }}</span>
+                </div>
+                <div class="flex flex-col items-end">
+                   <span class="text-[10px] uppercase font-bold text-slate-400">Inventário Ativo</span>
+                   <span class="font-bold text-slate-700 text-lg leading-none">{{ estoqueDisponivel.length }}</span>
+                </div>
+                <div class="h-8 w-px bg-slate-200"></div>
+                <div class="flex flex-col items-end">
+                   <span class="text-[10px] uppercase font-bold text-slate-400">SKUs Únicos</span>
+                   <span class="font-bold text-kabum text-lg leading-none">{{ listaAgrupadaMontagem.length }}</span>
+                </div>
+             </div>
+           </header>
+
+          <div class="flex flex-1 overflow-hidden no-print relative">
+            
+            <!-- VIEW 1: MONTAGEM -->
+            <div v-if="currentView === 'montagem'" class="flex flex-1 overflow-hidden w-full animate-fade-in">
+               <!-- CATÁLOGO -->
+               <main class="flex-1 flex flex-col min-w-0">
+                 <div class="p-3 bg-white border-b border-slate-200 flex gap-3 items-center shadow-sm z-20">
+                   <div class="relative flex-1 group">
+                     <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-kabum transition-colors text-sm"></i>
+                     <input type="text" v-model="search" placeholder="Pesquisar componentes..." 
+                            class="input input-sm w-full pl-9 bg-slate-50 border-slate-200 focus:bg-white focus:border-kabum focus:outline-none transition-all rounded-lg shadow-inner text-xs">
+                   </div>
+                   <select v-model="filterSec" class="select select-bordered select-sm border-slate-200 bg-slate-50 focus:bg-white focus:border-kabum rounded-lg w-56 shadow-sm font-medium text-slate-600 text-xs">
+                     <option value="">Todas as Categorias</option>
+                     <option v-for="cat in categorias" :value="cat">{{ cat }}</option>
+                   </select>
+                 </div>
+      
+                 <div class="flex-1 overflow-y-auto p-4 custom-scroll">
+                   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-10">
+                     <div v-for="grupo in listaPaginadaMontagem" :key="grupo.codigo" 
+                          @click="adicionarAoPC(grupo)"
+                          class="card-shadow bg-white rounded-xl border border-slate-200 cursor-pointer flex flex-col h-[160px] relative overflow-hidden group select-none hover:border-kabum transition-all">
+                       <div class="px-3 pt-3 flex justify-between items-start z-10">
+                         <span class="text-[9px] font-bold uppercase tracking-wider py-0.5 px-1.5 rounded" :class="getCategoryStyle(grupo.categoria)">{{ grupo.categoria }}</span>
+                         <span class="text-[10px] font-bold text-white bg-green-500 px-1.5 py-0.5 rounded-full shadow-sm">{{ grupo.quantidade }}</span>
+                       </div>
+                       <div class="px-3 mt-2 flex-1 flex flex-col z-10">
+                         <h3 class="text-xs font-bold text-slate-800 leading-snug line-clamp-3 group-hover:text-kabumBlue transition-colors mb-1">{{ grupo.descricao }}</h3>
+                         <div v-if="grupo.sub" class="mt-auto mb-1">
+                           <span class="inline-block text-[9px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{{ grupo.sub }}</span>
+                         </div>
+                       </div>
+                       <div class="px-3 py-2 mt-auto border-t border-slate-100 bg-slate-50 flex justify-between items-end group-hover:bg-blue-50/30 transition-colors z-10">
+                          <div class="flex flex-col"><span class="text-[8px] font-bold text-slate-400 uppercase">Cód. {{ grupo.codigo }}</span></div>
+                          <div class="font-black text-sm text-slate-800 group-hover:text-kabum leading-none">{{ formatMoney(grupo.custo) }}</div>
+                       </div>
+                       <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 z-20 pointer-events-none">
+                          <div class="bg-kabum text-white w-10 h-10 rounded-full flex items-center justify-center shadow-xl scale-0 group-hover:scale-100 transition-transform duration-200">
+                             <i class="fa-solid fa-plus text-lg"></i>
+                          </div>
+                       </div>
+                     </div>
+                   </div>
+                   <div v-if="listaAgrupadaMontagem.length > limit" class="py-6 flex justify-center">
+                     <button @click="limit += 50" class="btn btn-sm btn-outline border-slate-300 text-slate-500 text-xs">Carregar mais</button>
+                   </div>
+                 </div>
+               </main>
+      
+               <!-- SIDEBAR MONTAGEM -->
+               <aside class="w-[550px] bg-white border-l border-slate-200 shadow-xl z-20 flex flex-col">
+                 <div class="flex flex-col h-[80%] border-b-4 border-slate-100 bg-white">
+                     <div class="p-4 bg-white border-b border-slate-100 shadow-sm flex flex-col gap-3 relative z-30">
+                        <div class="flex justify-between items-center">
+                           <h2 class="font-bold text-slate-800 flex items-center gap-2 text-sm"><i class="fa-solid fa-microchip text-kabum"></i> Configuração Atual</h2>
+                           <button @click="currentBuild = []" class="text-[10px] text-red-400 hover:text-red-600 font-bold uppercase bg-red-50 px-2 py-1 rounded transition-colors" v-if="currentBuild.length">Limpar Tudo</button>
+                        </div>
+                        <div class="join w-full">
+                           <input v-model="pcName" type="text" placeholder="Nome do PC (Ex: Gamer i7)" class="input input-sm join-item w-full bg-slate-50 focus:bg-white focus:border-kabum text-xs">
+                           <button @click="autoName" class="btn btn-sm join-item" title="Gerar Nome Automático"><i class="fa-solid fa-magic text-xs"></i></button>
+                        </div>
+                        <div v-if="warnings.length" class="text-[10px] bg-amber-50 text-amber-800 p-2 rounded border border-amber-100">
+                           <div class="font-bold mb-0.5"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Validação Técnica:</div>
+                           <ul class="list-disc list-inside opacity-90 pl-1 space-y-0.5"><li v-for="w in warnings">{{ w }}</li></ul>
+                        </div>
+                     </div>
+                     
+                     <div class="flex-1 bg-slate-50 relative flex flex-col overflow-hidden">
+                        <!-- HEX GRID -->
+                        <div class="h-[320px] shrink-0 relative flex items-center justify-center border-b border-slate-200 bg-white/50">
+                            <div class="hex-grid">
+                               <template v-for="(icon, slot) in requiredSlots" :key="slot">
+                                   <div class="hex-wrapper" :style="getHexPosition(slot)">
+                                       <div v-if="hasPart(slot)" class="hex-shape hex-filled group" :class="getHexColor(slot)" @click.stop>
+                                           <i class="fa-solid text-2xl mb-1" :class="icon"></i>
+                                           <span class="text-[8px] font-bold uppercase">{{ getSlotShortName(slot) }}</span>
+                                           <div class="hex-remove" @click.stop="removePartBySlot(slot)"><i class="fa-solid fa-times"></i></div>
+                                           <div class="hex-tooltip"><div class="font-bold truncate max-w-[120px]">{{ getPartName(slot) }}</div></div>
+                                       </div>
+                                       <div v-else @click="filterSec = slot" class="hex-shape hex-empty group">
+                                           <i class="fa-solid text-xl mb-1 opacity-40 group-hover:opacity-100 transition-all" :class="icon"></i>
+                                           <span class="text-[8px] font-bold uppercase opacity-60 group-hover:opacity-100">{{ getSlotShortName(slot) }}</span>
+                                       </div>
+                                   </div>
+                               </template>
+                            </div>
+                        </div>
+
+                        <!-- LISTA DETALHADA -->
+                        <div class="flex-1 overflow-y-auto custom-scroll bg-slate-50 p-5 space-y-3">
+                            <div v-if="groupedBuild.length === 0" class="text-center text-xs text-slate-400 mt-4 italic">Nenhuma peça selecionada</div>
+                            <div v-for="item in groupedBuild" :key="item.etiqueta" class="bg-white border border-slate-200 rounded-lg shadow-sm flex items-center p-3 gap-3 transition-all hover:border-kabum">
+                                 <div class="w-1.5 self-stretch rounded-full" :class="getColorBar(item.categoria)"></div>
+                                 <div class="flex-1 min-w-0">
+                                     <div class="flex justify-between">
+                                         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{{ item.categoria }}</span>
+                                         <span class="text-[10px] font-mono text-slate-500">{{ item.endereco }}</span>
+                                     </div>
+                                     <div class="text-xs font-bold text-slate-800 leading-tight line-clamp-1 mt-0.5" :title="item.descricao">{{ item.descricao }}</div>
+                                     <div class="text-[11px] font-bold text-slate-600 mt-1">{{ formatMoney(item.custo * item.qty) }}</div>
+                                 </div>
+                                 <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1.5">
+                                     <button @click="updateQty(item, -1)" class="w-7 h-7 flex items-center justify-center bg-white text-slate-500 rounded hover:text-red-500 hover:bg-red-50 shadow-sm transition-colors text-xs font-bold"><i class="fa-solid fa-minus"></i></button>
+                                     <span class="w-7 text-center text-sm font-bold text-slate-700">{{ item.qty }}</span>
+                                     <button @click="updateQty(item, 1)" class="w-7 h-7 flex items-center justify-center bg-white text-slate-500 rounded hover:text-green-500 hover:bg-green-50 shadow-sm transition-colors text-xs font-bold"><i class="fa-solid fa-plus"></i></button>
+                                 </div>
+                            </div>
+                        </div>
+                     </div>
+
+                     <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+                        <div class="flex justify-between items-center mb-3">
+                           <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Custo Total</span>
+                           <span class="text-xl font-black text-kabumBlue">{{ formatMoney(buildTotal) }}</span>
+                        </div>
+                        <button @click="addToBatch" :disabled="!currentBuild.length" class="btn btn-sm w-full bg-kabum hover:bg-kabumDark text-white border-none shadow-lg shadow-orange-100">
+                           <i class="fa-solid fa-check mr-2"></i> Finalizar Configuração
+                        </button>
+                     </div>
+                 </div>
+
+                 <!-- LOTE SAIDA -->
+                 <div class="flex flex-col flex-1 min-h-0 bg-slate-50 border-t-4 border-slate-200">
+                     <div class="p-3 bg-white border-b border-slate-200 flex justify-between items-center px-4 shadow-sm">
+                        <span class="text-xs font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2"><i class="fa-solid fa-boxes-stacked text-kabumBlue"></i> Lote Final</span>
+                        <span class="badge badge-neutral badge-sm">{{ batch.length }}</span>
+                     </div>
+                     <div class="flex-1 overflow-y-auto p-3 custom-scroll space-y-2">
+                        <div v-if="batch.length === 0" class="h-20 flex items-center justify-center text-slate-400 text-xs italic">Nenhum PC finalizado</div>
+                        <div v-for="(pc, idx) in batch" :key="idx" class="bg-white p-3 rounded-lg border border-slate-200 hover:border-kabumBlue transition-all shadow-sm group">
+                           <div class="flex justify-between items-start mb-2">
+                              <div class="flex flex-col min-w-0 pr-2">
+                                 <span class="font-bold text-slate-800 text-sm truncate">{{ pc.nome }}</span>
+                                 <span class="text-[10px] text-slate-500 font-medium mt-0.5">{{ pc.pecas.length }} itens &bull; {{ formatMoney(pc.total) }}</span>
+                              </div>
+                              <button @click="removeFromBatch(idx)" class="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
+                           </div>
+                        </div>
+                     </div>
+                     <div class="p-4 bg-white border-t border-slate-200 grid grid-cols-2 gap-3">
+                        <button @click="printBatch" :disabled="!batch.length" class="btn btn-sm btn-outline border-slate-300 text-slate-600"><i class="fa-solid fa-print mr-2"></i> PDF</button>
+                        <button @click="saveBatch" :disabled="!batch.length || saving" class="btn btn-sm btn-success text-white shadow-lg shadow-green-100"><span v-if="saving" class="loading loading-spinner loading-xs"></span><span v-else>Salvar Lote</span></button>
+                     </div>
+                 </div>
+               </aside>
+            </div>
+      
+            <!-- VIEW 2: CONFERÊNCIA -->
+            <?!= include('Conference'); ?>
+
+            <!-- VIEW 3: REMESSA -->
+            <div v-if="currentView === 'remessa'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in">
+               <main class="flex-1 flex flex-col min-w-0 p-6 overflow-hidden">
+                 <!-- DASHBOARD REMESSA (MANTIDO) -->
+                 <div class="mb-6 flex flex-col">
+                     <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-simple text-kabumBlue"></i> Estoque Open Box
+                     </h2>
+                     <div class="grid grid-cols-5 gap-3">
+                        <div v-for="(stat, cat) in estatisticasCategoria" :key="cat"
+                             @click="filterRemessaCat = (filterRemessaCat === cat ? '' : cat)"
+                             class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm cursor-pointer transition-all hover:shadow-md hover:-translate-y-1 relative overflow-hidden group h-24 flex flex-col justify-between"
+                             :class="filterRemessaCat === cat ? 'ring-2 ring-kabumBlue ring-offset-2' : ''">
+                           <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                              <i class="fa-solid fa-box text-3xl"></i>
+                           </div>
+                           <div>
+                              <div class="text-[9px] uppercase font-bold text-slate-400 mb-0.5 tracking-wider truncate w-11/12">{{ cat }}</div>
+                              <div class="text-2xl font-black text-slate-800 leading-none">{{ stat.count }}</div>
+                           </div>
+                           <div>
+                              <div class="text-[10px] text-slate-500 font-medium">{{ formatMoney(stat.totalValue) }}</div>
+                              <div class="h-1 w-full bg-slate-100 mt-1.5 rounded-full overflow-hidden">
+                                 <div class="h-full bg-kabumBlue transition-all duration-500" :style="{ width: Math.min(100, (stat.count / 10) * 100) + '%' }"></div>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                 </div>
+                 <!-- LISTA REMESSA -->
+                 <div class="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                     <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+                        <div class="font-bold text-slate-700">
+                           <span v-if="filterRemessaCat">Filtrado por: <span class="text-kabumBlue">{{ filterRemessaCat }}</span></span>
+                           <span v-else>Catálogo Completo</span>
+                        </div>
+                        <div class="relative w-64">
+                           <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                           <input type="text" v-model="searchRemessa" placeholder="Código, Nome ou Tag..." class="input input-sm w-full pl-9 bg-white border-slate-300 rounded-lg focus:border-kabumBlue focus:outline-none">
+                        </div>
+                     </div>
+                     <div class="flex-1 overflow-y-auto custom-scroll">
+                        <table class="table table-sm w-full">
+                           <thead class="sticky top-0 bg-slate-100 z-10 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                              <tr>
+                                 <th class="w-12 text-center">Ação</th>
+                                 <th>Código</th>
+                                 <th>Etiqueta</th>
+                                 <th>Descrição</th>
+                                 <th>Local</th>
+                                 <th class="text-right">Custo</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              <tr v-for="item in listaFiltradaRemessa" :key="item.etiqueta" class="hover:bg-blue-50/50 transition-colors group">
+                                 <td class="text-center">
+                                    <button @click="addToRemessa(item)" class="btn btn-xs btn-square btn-outline border-slate-200 text-slate-400 hover:bg-kabumBlue hover:text-white hover:border-kabumBlue transition-all">
+                                       <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                 </td>
+                                 <td class="font-mono text-xs text-slate-500">{{ item.codigo }}</td>
+                                 <td><span class="badge badge-sm badge-ghost font-mono text-[10px]">{{ item.etiqueta }}</span></td>
+                                 <td>
+                                    <div class="font-bold text-xs text-slate-700 group-hover:text-kabumBlue transition-colors">{{ item.descricao }}</div>
+                                    <div class="text-[10px] text-slate-400">{{ item.categoria }} <span v-if="item.sub">&bull; {{ item.sub }}</span></div>
+                                 </td>
+                                 <td><span class="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ item.endereco }}</span></td>
+                                 <td class="text-right font-mono text-xs font-bold text-slate-700">{{ formatMoney(item.custo) }}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                        <div v-if="listaFiltradaRemessa.length > limitRemessa" class="p-4 text-center border-t border-slate-100">
+                           <button @click="limitRemessa += 100" class="btn btn-xs btn-ghost text-kabumBlue">Carregar mais...</button>
+                        </div>
+                     </div>
+                 </div>
+               </main>
+               <!-- SIDEBAR REMESSA -->
+               <aside class="w-[350px] bg-white border-l border-slate-200 shadow-xl z-20 flex flex-col">
+                  <div class="p-5 bg-gradient-to-r from-kabumBlue to-kabumBlueDark text-white shadow-md">
+                     <h2 class="font-bold text-lg flex items-center gap-2"><i class="fa-solid fa-truck-moving"></i> Nova Remessa</h2>
+                     <p class="text-xs text-blue-200 mt-1">Gestão de Transferência</p>
+                  </div>
+                  <div class="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
+                     <div>
+                        <label class="label text-xs font-bold text-slate-500 pb-1 uppercase tracking-wider">ID Remessa (Seq)</label>
+                        <div class="relative">
+                           <i class="fa-solid fa-hashtag absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                           <input v-model="remessaNum" type="number" min="1" class="input input-sm w-full pl-9 border-slate-300 focus:border-kabumBlue focus:outline-none font-bold text-slate-700">
+                        </div>
+                     </div>
+                     <div>
+                        <label class="label text-xs font-bold text-slate-500 pb-1 uppercase tracking-wider">Destino</label>
+                        <div class="relative">
+                           <i class="fa-solid fa-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                           <input v-model="remessaDestino" type="text" placeholder="Ex: RMA, Loja Física..." class="input input-sm w-full pl-9 border-slate-300 focus:border-kabumBlue focus:outline-none">
+                        </div>
+                     </div>
+                  </div>
+                  <div class="flex-1 overflow-y-auto p-3 custom-scroll space-y-2 bg-slate-50">
+                     <div v-if="remessaCart.length === 0" class="h-40 flex flex-col items-center justify-center text-slate-400 opacity-60">
+                        <i class="fa-solid fa-dolly text-4xl mb-2"></i>
+                        <span class="text-xs font-bold">Aguardando itens...</span>
+                     </div>
+                     <transition-group name="list">
+                        <div v-for="(item, idx) in remessaCart" :key="item.etiqueta" class="bg-white p-2.5 rounded-lg border border-slate-200 flex gap-3 items-center shadow-sm hover:border-kabumBlue group transition-all">
+                           <div class="w-1 h-8 rounded-full bg-slate-300 group-hover:bg-kabumBlue transition-colors"></div>
+                           <div class="flex-1 min-w-0">
+                              <div class="text-xs font-bold text-slate-800 truncate">{{ item.descricao }}</div>
+                              <div class="flex justify-between mt-1 items-center">
+                                 <span class="text-[10px] font-mono bg-slate-100 px-1.5 rounded text-slate-500 border border-slate-200">{{ item.etiqueta }}</span>
+                                 <span class="text-[10px] font-bold text-slate-600">{{ formatMoney(item.custo) }}</span>
+                              </div>
+                           </div>
+                           <button @click="remessaCart.splice(idx, 1)" class="btn btn-xs btn-ghost text-red-300 hover:text-red-500 btn-square"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                     </transition-group>
+                  </div>
+                  <div class="p-5 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+                     <div class="flex justify-between items-center mb-2 text-sm">
+                        <span class="text-slate-500 font-medium">Itens</span>
+                        <span class="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-full">{{ remessaCart.length }}</span>
+                     </div>
+                     <div class="flex justify-between items-center mb-5 text-sm">
+                        <span class="text-slate-500 font-medium">Valor Total</span>
+                        <span class="font-black text-xl text-kabumBlue">{{ formatMoney(remessaTotal) }}</span>
+                     </div>
+                     <div class="grid grid-cols-2 gap-3 mb-2">
+                        <button @click="printRemessa" :disabled="!remessaCart.length" class="btn btn-sm btn-outline border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-kabumBlue"><i class="fa-solid fa-print mr-2"></i> PDF</button>
+                        <button @click="saveRemessa" :disabled="!remessaCart.length || saving" class="btn btn-sm bg-kabumBlue hover:bg-kabumBlueDark text-white border-none shadow-lg shadow-blue-200">
+                           <span v-if="saving" class="loading loading-spinner loading-xs"></span>
+                           <span v-else>Salvar</span>
+                        </button>
+                     </div>
+                     <button @click="exportToCSV" :disabled="!remessaCart.length" class="btn btn-xs w-full btn-ghost text-slate-400 font-normal"><i class="fa-solid fa-file-csv mr-1"></i> Exportar para Excel</button>
+                  </div>
+               </aside>
+            </div>
+      
+            <!-- VIEW 4: HISTÓRICO (MANTIDO) -->
+            <div v-if="currentView === 'historico'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in flex-col p-6">
+                <!-- Conteúdo do Histórico mantido igual -->
+                <div class="flex justify-between items-end mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-emerald-500"></i> Histórico de Operações
+                        </h2>
+                        <p class="text-sm text-slate-400 mt-1">Gerencie lotes passados, exclua registros ou exporte dados.</p>
+                    </div>
+                    <div class="flex bg-white rounded-lg p-1 shadow-sm border border-slate-200 mr-4">
+                        <button @click="historicoTab = 'remessa'" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all" :class="historicoTab === 'remessa' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'">Remessas</button>
+                        <button @click="historicoTab = 'montagem'" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all" :class="historicoTab === 'montagem' ? 'bg-kabum text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'">Montagens</button>
+                    </div>
+                    <div class="relative w-64">
+                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" v-model="searchHistorico" placeholder="Buscar ID, Data..." class="input input-sm w-full pl-9 bg-white border-slate-300 rounded-lg focus:border-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scroll space-y-4 pb-10">
+                    <div v-if="historicoList.length === 0" class="h-64 flex flex-col items-center justify-center text-slate-300">
+                        <i class="fa-solid fa-box-open text-5xl mb-3 opacity-50"></i>
+                        <span class="text-lg font-bold">Nenhum registro encontrado</span>
+                    </div>
+                    <div v-for="lote in historicoList" :key="lote.idLote" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group hover:border-emerald-400 transition-colors">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center cursor-pointer select-none" @click="toggleDetails(lote.idLote)">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm" :class="lote.tipo === 'Montagem' ? 'bg-kabum' : 'bg-kabumBlue'"><i class="fa-solid" :class="lote.tipo === 'Montagem' ? 'fa-screwdriver-wrench' : 'fa-truck-ramp-box'"></i></div>
+                                <div>
+                                    <div class="font-bold text-slate-800 text-lg">{{ lote.idLote }}</div>
+                                    <div class="text-xs text-slate-500 font-medium flex gap-2"><span><i class="fa-regular fa-calendar mr-1"></i> {{ lote.dataHora }}</span><span class="text-slate-300">|</span><span>{{ lote.itens.length }} Itens</span><span v-if="lote.destino" class="text-kabumBlueDark font-bold ml-2"><i class="fa-solid fa-location-dot mr-1"></i> {{ lote.destino }}</span></div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="text-right mr-4"><div class="text-[10px] uppercase font-bold text-slate-400">Valor Total</div><div class="font-black text-lg text-slate-700">{{ formatMoney(lote.total) }}</div></div>
+                                <div class="flex gap-2">
+                                    <button @click.stop="exportHistoricoLote(lote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-emerald-600" title="Exportar CSV"><i class="fa-solid fa-file-csv text-lg"></i></button>
+                                    <button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteLote(lote.idLote)" class="btn btn-sm btn-ghost text-slate-400 hover:text-red-600 hover:bg-red-50" title="Excluir Lote Inteiro"><i class="fa-solid fa-trash-can text-lg"></i></button>
+                                    <button class="btn btn-sm btn-ghost text-slate-400"><i class="fa-solid transition-transform duration-300" :class="expandedItems.includes(lote.idLote) ? 'fa-chevron-up' : 'fa-chevron-down'"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="expandedItems.includes(lote.idLote)" class="bg-white border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
+                            <table class="table table-sm w-full text-xs">
+                                <thead class="bg-slate-50 text-slate-500 font-bold uppercase"><tr><th class="pl-6">Código</th><th>Etiqueta</th><th>Descrição</th><th>Local</th><th class="text-right">Custo</th><th class="text-center w-10">Ação</th></tr></thead>
+                                <tbody><tr v-for="item in lote.itens" :key="item.etiqueta + item.codigo" class="hover:bg-slate-50 border-b border-slate-100 last:border-0"><td class="pl-6 font-mono text-slate-500">{{ item.codigo }}</td><td><span class="badge badge-xs badge-ghost">{{ item.etiqueta }}</span></td><td class="font-medium text-slate-700">{{ item.descricao }}</td><td class="font-mono text-slate-500">{{ item.endereco }}</td><td class="text-right font-bold">{{ formatMoney(item.custo) }}</td><td class="text-center"><button v-if="userPermissions.canEditHistory || isAdmin" @click.stop="deleteItemHistorico(lote.idLote, item)" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Remover Item"><i class="fa-solid fa-times"></i></button></td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 5: DASHBOARD (MANTIDO) -->
+            <div v-if="currentView === 'dashboard'" class="flex flex-1 overflow-hidden w-full bg-slate-50 animate-fade-in flex-col p-6 custom-scroll overflow-y-auto">
+                <!-- Conteúdo Dashboard mantido igual ao anterior -->
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-purple-600"></i> Dashboard Analítico
+                        </h2>
+                        <p class="text-sm text-slate-400 mt-1">Visão geral de desempenho e movimentações.</p>
+                    </div>
+                    <div class="flex gap-3 items-center">
+                        <select v-model="dashboardType" class="select select-sm border-slate-200 shadow-sm text-slate-600 font-bold focus:border-purple-500 bg-white">
+                            <option value="Montagem">Montagens</option>
+                            <option value="Remessa">Remessas</option>
+                        </select>
+                        <select v-model="dashboardRange" class="select select-sm border-slate-200 shadow-sm text-slate-600 font-bold focus:border-purple-500 bg-white">
+                            <option :value="30">Últimos 30 Dias</option>
+                            <option :value="90">Últimos 3 Meses</option>
+                            <option :value="365">Este Ano</option>
+                            <option :value="9999">Todo o Período</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                        <div v-if="dashboardRange === 'custom'" class="flex gap-2 animate-in fade-in items-center bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                            <input type="date" v-model="customStartDate" class="input input-sm border-0 focus:outline-none text-xs text-slate-600 bg-transparent">
+                            <span class="text-slate-400 text-[10px] font-bold uppercase">ATÉ</span>
+                            <input type="date" v-model="customEndDate" class="input input-sm border-0 focus:outline-none text-xs text-slate-600 bg-transparent">
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-purple-200 transition-colors">
+                        <div class="absolute -right-6 -top-6 w-24 h-24 bg-purple-50 rounded-full group-hover:scale-110 transition-transform"></div>
+                        <div class="relative z-10"><div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Valor Movimentado</div><div class="text-3xl font-black text-slate-800">{{ formatMoney(dashboardKpis.totalValue) }}</div><div class="mt-2 text-xs font-medium text-emerald-500 flex items-center gap-1"><i class="fa-solid fa-sack-dollar"></i> Total Bruto</div></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
+                        <div class="absolute -right-6 -top-6 w-24 h-24 bg-blue-50 rounded-full group-hover:scale-110 transition-transform"></div>
+                        <div class="relative z-10"><div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{{ dashboardType === 'Montagem' ? 'Computadores Montados' : 'Lotes Enviados' }}</div><div class="text-3xl font-black text-slate-800">{{ dashboardKpis.count }}</div><div class="mt-2 text-xs font-medium text-blue-500 flex items-center gap-1"><i class="fa-solid fa-layer-group"></i> Volume Total</div></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-orange-200 transition-colors">
+                        <div class="absolute -right-6 -top-6 w-24 h-24 bg-orange-50 rounded-full group-hover:scale-110 transition-transform"></div>
+                        <div class="relative z-10"><div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ticket Médio</div><div class="text-3xl font-black text-slate-800">{{ formatMoney(dashboardKpis.avgTicket) }}</div><div class="mt-2 text-xs font-medium text-orange-500 flex items-center gap-1"><i class="fa-solid fa-tags"></i> Por {{ dashboardType === 'Montagem' ? 'Máquina' : 'Remessa' }}</div></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-8">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                        <h3 class="font-bold text-slate-700 mb-2 flex items-center gap-2"><i class="fa-solid fa-chart-column text-purple-500"></i> Volume Diário</h3>
+                        <div class="flex-1 w-full h-full relative"><canvas ref="dailyChartRef"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                        <h3 class="font-bold text-slate-700 mb-2 flex items-center gap-2"><i class="fa-solid fa-chart-bar text-blue-500"></i> Peças por Categoria</h3>
+                        <div class="flex-1 w-full h-full relative"><canvas ref="categoryChartRef"></canvas></div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-calendar-days text-orange-500"></i> Resumo Mensal</h3>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm w-full"><thead><tr class="border-b border-slate-100 text-slate-400 text-[10px] uppercase"><th class="text-left">Mês/Ano</th><th class="text-center">Quantidade</th><th class="text-right">Valor Total</th></tr></thead><tbody><tr v-for="m in dashboardMonthlyStats" :key="m.label" class="hover:bg-slate-50"><td class="font-bold text-slate-700">{{ m.label }}</td><td class="text-center font-mono text-slate-600">{{ m.count }}</td><td class="text-right font-bold text-emerald-600">{{ formatMoney(m.value) }}</td></tr></tbody></table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW ADMIN (MODULARIZADO) -->
+            <?!= include('Admin'); ?>
+
+          </div>
+        </div>
+
     </div>
+
+    <?!= include('JavaScript'); ?>
 
   </div>
-
-  <?!= include('JavaScript'); ?>
-
 </body>
 </html>
