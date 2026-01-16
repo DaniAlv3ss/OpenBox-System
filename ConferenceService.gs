@@ -1,13 +1,13 @@
 /**
  * CONFERENCESERVICE.GS
  * Serviço dedicado para o módulo de Conferência e Qualidade.
- * ATUALIZADO COM LOCK SERVICE (Evita colisão de dados)
+ * ATUALIZADO PARA SEGURANÇA HÍBRIDA
  */
 
-// Busca dados separados por status
-function getConferenceData() {
-  // Permite acesso de leitura para conferentes
-  checkSecurityPermission('Qualquer');
+// Busca dados separados por status - AGORA RECEBE authObj
+function getConferenceData(authObj) {
+  // BLINDAGEM: Verifica permissão usando a função do Código.gs
+  verifyAccess(authObj, 'Qualquer');
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEETS.HIST_MONTAGEM);
@@ -66,16 +66,15 @@ function getConferenceData() {
   };
 }
 
-// Atualiza status e Salva Log com E-mail + LOCK SERVICE
-function markLoteAsChecked(loteId, pcName) {
-  // SEGURANÇA: Apenas Conferente ou Admin pode validar
-  const userEmail = checkSecurityPermission('Conferente|Admin');
+// Atualiza status e Salva Log com E-mail + LOCK SERVICE - RECEBE authObj
+function markLoteAsChecked(loteId, pcName, authObj) {
+  // BLINDAGEM: Apenas Conferente ou Admin pode validar
+  const user = verifyAccess(authObj, 'Conferente|Admin');
+  const userEmail = user.email;
 
   // --- LOCK SERVICE START ---
-  // Impede que duas pessoas aprovem o mesmo lote ao mesmo tempo
   const lock = LockService.getScriptLock();
   try {
-      // Tenta adquirir o "cadeado" por 30 segundos
       const success = lock.tryLock(30000);
       if (!success) {
           throw new Error('O sistema está ocupado processando outra conferência. Tente novamente em alguns segundos.');
@@ -83,7 +82,6 @@ function markLoteAsChecked(loteId, pcName) {
 
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       
-      // 1. Atualiza Status na Aba de Montagem
       const sheetMontagem = ss.getSheetByName(SHEETS.HIST_MONTAGEM);
       if (!sheetMontagem) throw new Error("Aba de Montagens não encontrada");
 
@@ -100,7 +98,6 @@ function markLoteAsChecked(loteId, pcName) {
 
       // Atualiza linhas correspondentes ao lote
       for (let i = 1; i < data.length; i++) {
-        // Verifica Lote E se já não foi conferido (para evitar duplicidade de log)
         if (String(data[i][0]) === loteId) {
           const currentStatus = data[i][statusIdx];
           if (currentStatus !== 'Conferência Realizada') {
@@ -111,10 +108,8 @@ function markLoteAsChecked(loteId, pcName) {
       }
 
       if (updated) {
-          // 2. Salva Log na Aba de Logs do Sistema (Centralizado)
           logSystemAction(userEmail, 'CONFERENCIA_REALIZADA', `Aprovou o Lote ${loteId} (PC: ${pcName || 'Completo'})`);
 
-          // Log Específico
           const logSheetName = SHEETS.HIST_CONFERENCIA;
           let sheetLog = ss.getSheetByName(logSheetName);
           if (!sheetLog) {
@@ -138,10 +133,8 @@ function markLoteAsChecked(loteId, pcName) {
 
   } catch (e) {
       Logger.log("Erro no Lock: " + e.message);
-      throw e; // Repassa o erro para o frontend
+      throw e; 
   } finally {
-      // --- LOCK SERVICE RELEASE ---
-      // Solta o cadeado independente de erro ou sucesso
       lock.releaseLock();
   }
 }
